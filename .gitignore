@@ -1,0 +1,19 @@
+node_modules/
+.turbo/
+dist/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
+
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# 개인 학습 자료
+study/
