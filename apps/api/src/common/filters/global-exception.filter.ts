@@ -7,10 +7,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { COMMON_ERROR } from '../constants/common-error';
-import { AppException } from '../exceptions/app.exception';
-import { ApiErrorResponse } from '../types/api-response.type';
-import { AppError } from '../types/app-error.type';
+import { COMMON_ERROR } from '@/common/constants/common-error';
+import { AppException } from '@/common/exceptions/app.exception';
+import { ApiErrorResponse } from '@/common/types/api-response.type';
+import { AppError } from '@/common/types/app-error.type';
 
 type ExceptionBody = {
   code?: unknown;
