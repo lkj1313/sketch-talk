@@ -1,4 +1,4 @@
-import { Transform, TransformFnParams } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsByteLength,
   IsEmail,
@@ -6,16 +6,10 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-
-function normalizeEmail({ value }: TransformFnParams): unknown {
-  return typeof value === 'string'
-    ? value.trim().toLowerCase()
-    : (value as unknown);
-}
-
-function trimString({ value }: TransformFnParams): unknown {
-  return typeof value === 'string' ? value.trim() : (value as unknown);
-}
+import {
+  normalizeEmail,
+  trimString,
+} from '@/common/transformers/string.transformer';
 
 export class SignupDto {
   @Transform(normalizeEmail)
