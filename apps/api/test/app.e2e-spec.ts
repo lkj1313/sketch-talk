@@ -72,6 +72,48 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('POST /api/v1/auth/login 요청으로 로그인한다', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        email: signupEmail.toUpperCase(),
+        password: 'password1234',
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 200,
+      data: {
+        user: {
+          email: signupEmail,
+          nickname: signupNickname,
+          avatarUrl: null,
+        },
+      },
+    });
+    expect(response.body.data.accessToken).toEqual(expect.any(String));
+    expect(response.body.data.user).not.toHaveProperty('passwordHash');
+  });
+
+  it('잘못된 비밀번호로 로그인하면 401 오류를 반환한다', () => {
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        email: signupEmail,
+        password: 'wrong-password',
+      })
+      .expect(401)
+      .expect({
+        success: false,
+        statusCode: 401,
+        error: {
+          code: 'AUTH_INVALID_CREDENTIALS',
+          message: '이메일 또는 비밀번호가 올바르지 않습니다.',
+        },
+      });
+  });
+
   afterAll(async () => {
     await prisma.user.deleteMany({
       where: {
