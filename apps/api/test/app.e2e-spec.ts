@@ -23,17 +23,17 @@ describe('AppController (e2e)', () => {
     prisma = app.get(PrismaService);
   });
 
-  it('GET / 요청에 공통 성공 응답을 반환한다', () => {
-    return request(app.getHttpServer()).get('/').expect(200).expect({
+  it('GET /api/v1 요청에 공통 성공 응답을 반환한다', () => {
+    return request(app.getHttpServer()).get('/api/v1').expect(200).expect({
       success: true,
       statusCode: 200,
       data: 'Hello World!',
     });
   });
 
-  it('POST /auth/signup 요청으로 회원을 생성한다', async () => {
+  it('POST /api/v1/auth/signup 요청으로 회원을 생성한다', async () => {
     const response = await request(app.getHttpServer())
-      .post('/auth/signup')
+      .post('/api/v1/auth/signup')
       .send({
         email: signupEmail.toUpperCase(),
         password: 'password1234',
@@ -55,7 +55,7 @@ describe('AppController (e2e)', () => {
 
   it('중복 이메일로 회원가입하면 409 오류를 반환한다', () => {
     return request(app.getHttpServer())
-      .post('/auth/signup')
+      .post('/api/v1/auth/signup')
       .send({
         email: signupEmail,
         password: 'password1234',
