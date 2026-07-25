@@ -2,29 +2,20 @@ import { Transform } from 'class-transformer';
 import {
   IsByteLength,
   IsEmail,
+  IsNotEmpty,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
-import {
-  normalizeEmail,
-  trimString,
-} from '@/common/transformers/string.transformer';
+import { normalizeEmail } from '@/common/transformers/string.transformer';
 
-export class SignupDto {
+export class LoginDto {
   @Transform(normalizeEmail)
   @IsEmail()
   @MaxLength(320)
   email!: string;
 
   @IsString()
-  @MinLength(12)
+  @IsNotEmpty()
   @IsByteLength(0, 72)
   password!: string;
-
-  @Transform(trimString)
-  @IsString()
-  @MinLength(2)
-  @MaxLength(30)
-  nickname!: string;
 }

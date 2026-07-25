@@ -23,17 +23,17 @@ describe('AppController (e2e)', () => {
     prisma = app.get(PrismaService);
   });
 
-  it('GET / 요청에 공통 성공 응답을 반환한다', () => {
-    return request(app.getHttpServer()).get('/').expect(200).expect({
+  it('GET /api/v1 요청에 공통 성공 응답을 반환한다', () => {
+    return request(app.getHttpServer()).get('/api/v1').expect(200).expect({
       success: true,
       statusCode: 200,
       data: 'Hello World!',
     });
   });
 
-  it('POST /auth/signup 요청으로 회원을 생성한다', async () => {
+  it('POST /api/v1/auth/signup 요청으로 회원을 생성한다', async () => {
     const response = await request(app.getHttpServer())
-      .post('/auth/signup')
+      .post('/api/v1/auth/signup')
       .send({
         email: signupEmail.toUpperCase(),
         password: 'password1234',
@@ -55,7 +55,7 @@ describe('AppController (e2e)', () => {
 
   it('중복 이메일로 회원가입하면 409 오류를 반환한다', () => {
     return request(app.getHttpServer())
-      .post('/auth/signup')
+      .post('/api/v1/auth/signup')
       .send({
         email: signupEmail,
         password: 'password1234',
@@ -68,6 +68,48 @@ describe('AppController (e2e)', () => {
         error: {
           code: 'AUTH_EMAIL_ALREADY_EXISTS',
           message: '이미 사용 중인 이메일입니다.',
+        },
+      });
+  });
+
+  it('POST /api/v1/auth/login 요청으로 로그인한다', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        email: signupEmail.toUpperCase(),
+        password: 'password1234',
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 200,
+      data: {
+        user: {
+          email: signupEmail,
+          nickname: signupNickname,
+          avatarUrl: null,
+        },
+      },
+    });
+    expect(response.body.data.accessToken).toEqual(expect.any(String));
+    expect(response.body.data.user).not.toHaveProperty('passwordHash');
+  });
+
+  it('잘못된 비밀번호로 로그인하면 401 오류를 반환한다', () => {
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        email: signupEmail,
+        password: 'wrong-password',
+      })
+      .expect(401)
+      .expect({
+        success: false,
+        statusCode: 401,
+        error: {
+          code: 'AUTH_INVALID_CREDENTIALS',
+          message: '이메일 또는 비밀번호가 올바르지 않습니다.',
         },
       });
   });

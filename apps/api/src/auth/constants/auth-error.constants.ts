@@ -1,6 +1,11 @@
 import { HttpStatus } from '@nestjs/common';
 
 export const AUTH_ERROR = {
+  INVALID_CREDENTIALS: {
+    statusCode: HttpStatus.UNAUTHORIZED,
+    code: 'AUTH_INVALID_CREDENTIALS',
+    message: '이메일 또는 비밀번호가 올바르지 않습니다.',
+  },
   EMAIL_ALREADY_EXISTS: {
     statusCode: HttpStatus.CONFLICT,
     code: 'AUTH_EMAIL_ALREADY_EXISTS',

@@ -1,16 +1,28 @@
 import { Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { BCRYPT_SALT_ROUNDS } from '@/auth/constants/auth.constants';
+import {
+  BCRYPT_DUMMY_HASH,
+  BCRYPT_SALT_ROUNDS,
+} from '@/auth/constants/auth.constants';
 import { AUTH_ERROR } from '@/auth/constants/auth-error.constants';
+import { LoginDto } from '@/auth/dto/login.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SignupDto } from '@/auth/dto/signup.dto';
 import { AppException } from '@/common/exceptions/app.exception';
 import { Prisma } from '@/generated/prisma/client';
-import { SignupUser } from '@/auth/types/auth-response.type';
+import {
+  AccessTokenPayload,
+  LoginResult,
+  SignupUser,
+} from '@/auth/types/auth-response.type';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async signup(dto: SignupDto): Promise<SignupUser> {
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
@@ -40,6 +52,54 @@ export class AuthService {
 
       throw error;
     }
+  }
+
+  async login(dto: LoginDto): Promise<LoginResult> {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: dto.email,
+      },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        nickname: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+    });
+    const passwordHash = user?.passwordHash ?? BCRYPT_DUMMY_HASH;
+    const isPasswordValid = await bcrypt.compare(dto.password, passwordHash);
+
+    if (!user || !isPasswordValid) {
+      throw new AppException(AUTH_ERROR.INVALID_CREDENTIALS);
+    }
+
+    const payload: AccessTokenPayload = {
+      sub: user.id,
+    };
+    const [accessToken] = await Promise.all([
+      this.jwtService.signAsync(payload),
+      this.prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          lastLoginAt: new Date(),
+        },
+      }),
+    ]);
+
+    return {
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        nickname: user.nickname,
+        avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt,
+      },
+    };
   }
 
   private getUniqueConstraintError(
