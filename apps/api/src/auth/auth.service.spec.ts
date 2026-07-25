@@ -141,6 +141,31 @@ describe('AuthService', () => {
       message: '이메일 또는 비밀번호가 올바르지 않습니다.',
     });
   });
+
+  it('사용자 ID로 현재 사용자 정보를 반환한다', async () => {
+    const user = {
+      id: 'user-id',
+      email: signupDto.email,
+      nickname: signupDto.nickname,
+      avatarUrl: null,
+      createdAt: new Date(),
+    };
+    userFindUnique.mockResolvedValue(user);
+
+    await expect(authService.getMe(user.id)).resolves.toEqual(user);
+  });
+
+  it('사용자를 찾을 수 없으면 AUTH_INVALID_ACCESS_TOKEN 오류를 발생시킨다', async () => {
+    userFindUnique.mockResolvedValue(null);
+
+    const error = await getMeError(authService, 'deleted-user-id');
+
+    expect(error.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+    expect(error.getResponse()).toEqual({
+      code: 'AUTH_INVALID_ACCESS_TOKEN',
+      message: '유효하지 않거나 만료된 Access Token입니다.',
+    });
+  });
 });
 
 function createUniqueConstraintError(target: string[]) {
@@ -187,6 +212,21 @@ async function getLoginError(
 ): Promise<AppException> {
   try {
     await authService.login(loginDto);
+  } catch (error) {
+    if (error instanceof AppException) {
+      return error;
+    }
+  }
+
+  throw new Error('AppException이 발생하지 않았습니다.');
+}
+
+async function getMeError(
+  authService: AuthService,
+  userId: string,
+): Promise<AppException> {
+  try {
+    await authService.getMe(userId);
   } catch (error) {
     if (error instanceof AppException) {
       return error;

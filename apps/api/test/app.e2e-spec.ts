@@ -9,6 +9,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let accessToken: string;
   const signupEmail = `e2e-${Date.now()}@example.com`;
   const signupNickname = `e2e-${Date.now()}`;
 
@@ -94,6 +95,7 @@ describe('AppController (e2e)', () => {
     });
     expect(response.body.data.accessToken).toEqual(expect.any(String));
     expect(response.body.data.user).not.toHaveProperty('passwordHash');
+    accessToken = response.body.data.accessToken as string;
   });
 
   it('잘못된 비밀번호로 로그인하면 401 오류를 반환한다', () => {
@@ -110,6 +112,54 @@ describe('AppController (e2e)', () => {
         error: {
           code: 'AUTH_INVALID_CREDENTIALS',
           message: '이메일 또는 비밀번호가 올바르지 않습니다.',
+        },
+      });
+  });
+
+  it('유효한 Access Token으로 GET /api/v1/auth/me 요청 시 내 정보를 반환한다', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: true,
+          statusCode: 200,
+          data: {
+            email: signupEmail,
+            nickname: signupNickname,
+            avatarUrl: null,
+          },
+        });
+        expect(response.body.data).not.toHaveProperty('passwordHash');
+      });
+  });
+
+  it('Access Token 없이 내 정보를 요청하면 401 오류를 반환한다', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .expect(401)
+      .expect({
+        success: false,
+        statusCode: 401,
+        error: {
+          code: 'AUTH_ACCESS_TOKEN_REQUIRED',
+          message: 'Access Token이 필요합니다.',
+        },
+      });
+  });
+
+  it('변조된 Access Token으로 내 정보를 요청하면 401 오류를 반환한다', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${accessToken}tampered`)
+      .expect(401)
+      .expect({
+        success: false,
+        statusCode: 401,
+        error: {
+          code: 'AUTH_INVALID_ACCESS_TOKEN',
+          message: '유효하지 않거나 만료된 Access Token입니다.',
         },
       });
   });

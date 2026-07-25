@@ -1,6 +1,16 @@
 import { HttpStatus } from '@nestjs/common';
 
 export const AUTH_ERROR = {
+  ACCESS_TOKEN_REQUIRED: {
+    statusCode: HttpStatus.UNAUTHORIZED,
+    code: 'AUTH_ACCESS_TOKEN_REQUIRED',
+    message: 'Access Token이 필요합니다.',
+  },
+  INVALID_ACCESS_TOKEN: {
+    statusCode: HttpStatus.UNAUTHORIZED,
+    code: 'AUTH_INVALID_ACCESS_TOKEN',
+    message: '유효하지 않거나 만료된 Access Token입니다.',
+  },
   INVALID_CREDENTIALS: {
     statusCode: HttpStatus.UNAUTHORIZED,
     code: 'AUTH_INVALID_CREDENTIALS',
