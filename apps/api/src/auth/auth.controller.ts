@@ -1,9 +1,23 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthService } from '@/auth/auth.service';
+import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { LoginDto } from '@/auth/dto/login.dto';
 import { SignupDto } from '@/auth/dto/signup.dto';
-import { LoginResult, SignupUser } from '@/auth/types/auth-response.type';
-import { ControllerResponse } from '@/common/types/api-response.type';
+import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
+import type {
+  AccessTokenPayload,
+  LoginResult,
+  SignupUser,
+} from '@/auth/types/auth-response.type';
+import type { ControllerResponse } from '@/common/types/api-response.type';
 
 @Controller('auth')
 export class AuthController {
@@ -24,5 +38,15 @@ export class AuthController {
     const result = await this.authService.login(dto);
 
     return { data: result };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async getMe(
+    @CurrentUser() currentUser: AccessTokenPayload,
+  ): Promise<ControllerResponse<SignupUser>> {
+    const user = await this.authService.getMe(currentUser.sub);
+
+    return { data: user };
   }
 }

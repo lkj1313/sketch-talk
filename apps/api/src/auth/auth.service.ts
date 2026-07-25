@@ -102,6 +102,27 @@ export class AuthService {
     };
   }
 
+  async getMe(userId: string): Promise<SignupUser> {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        email: true,
+        nickname: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new AppException(AUTH_ERROR.INVALID_ACCESS_TOKEN);
+    }
+
+    return user;
+  }
+
   private getUniqueConstraintError(
     error: Prisma.PrismaClientKnownRequestError,
   ) {

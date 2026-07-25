@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from '@/auth/auth.controller';
 import { AuthService } from '@/auth/auth.service';
 import { JWT_ACCESS_EXPIRES_IN_SECONDS } from '@/auth/constants/auth.constants';
+import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { PrismaModule } from '@/prisma/prisma.module';
 
 @Module({
@@ -21,6 +22,6 @@ import { PrismaModule } from '@/prisma/prisma.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, JwtAuthGuard],
 })
 export class AuthModule {}
