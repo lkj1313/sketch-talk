@@ -1,4 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { RoomStatus, RoomVisibility } from '@/generated/prisma/client';
 import { AppException } from '@/common/exceptions/app.exception';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -19,6 +20,12 @@ describe('RoomsService', () => {
   const roomCount = jest.fn();
   const userFindUnique = jest.fn();
   const transaction = jest.fn();
+  const eventEmit = jest.fn();
+  const eventEmitAsync = jest.fn().mockResolvedValue([]);
+  const eventEmitter = {
+    emit: eventEmit,
+    emitAsync: eventEmitAsync,
+  } as unknown as EventEmitter2;
   const prisma = {
     roomParticipant: {
       findFirst: roomParticipantFindFirst,
@@ -40,7 +47,7 @@ describe('RoomsService', () => {
     },
     $transaction: transaction,
   } as unknown as PrismaService;
-  const roomsService = new RoomsService(prisma);
+  const roomsService = new RoomsService(prisma, eventEmitter);
   const createdAt = new Date();
   const dto: CreateRoomDto = {
     title: '같이 게임해요',
@@ -685,7 +692,10 @@ describe('RoomsService', () => {
     roomParticipantFindFirst.mockResolvedValue({
       id: 'participant-id',
       roomId: 'room-id',
-      room: { hostParticipantId: 'host-participant-id' },
+      room: {
+        hostParticipantId: 'host-participant-id',
+        _count: { participants: 2 },
+      },
     });
 
     await roomsService.leave({ type: 'USER', userId: 'user-id' }, 'ABC234');
@@ -702,7 +712,10 @@ describe('RoomsService', () => {
       .mockResolvedValueOnce({
         id: 'host-participant-id',
         roomId: 'room-id',
-        room: { hostParticipantId: 'host-participant-id' },
+        room: {
+          hostParticipantId: 'host-participant-id',
+          _count: { participants: 2 },
+        },
       })
       .mockResolvedValueOnce({ id: 'next-host-id' });
 
@@ -725,7 +738,10 @@ describe('RoomsService', () => {
       .mockResolvedValueOnce({
         id: 'host-participant-id',
         roomId: 'room-id',
-        room: { hostParticipantId: 'host-participant-id' },
+        room: {
+          hostParticipantId: 'host-participant-id',
+          _count: { participants: 1 },
+        },
       })
       .mockResolvedValueOnce(null);
 
