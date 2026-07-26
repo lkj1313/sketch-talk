@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '@/app.module';
@@ -11,6 +12,7 @@ describe('AppController (e2e)', () => {
   let prisma: PrismaService;
   let accessToken: string;
   let loginRefreshCookie: string;
+  let guestTokenHash: string | undefined;
   let agent: ReturnType<typeof request.agent>;
   const signupEmail = `e2e-${Date.now()}@example.com`;
   const signupNickname = `e2e-${Date.now()}`;
@@ -33,6 +35,39 @@ describe('AppController (e2e)', () => {
       statusCode: 200,
       data: 'Hello World!',
     });
+  });
+
+  it('POST /api/v1/guest-sessions 요청으로 비회원 세션을 발급한다', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/guest-sessions')
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 201,
+      data: {
+        expiresAt: expect.any(String),
+      },
+    });
+    expect(response.body.data).not.toHaveProperty('guestToken');
+
+    const setCookie = response.headers['set-cookie'] as string[];
+    expect(setCookie[0]).toContain('guestToken=');
+    expect(setCookie[0]).toContain('HttpOnly');
+    expect(setCookie[0]).toContain('SameSite=Lax');
+    expect(setCookie[0]).toContain('Path=/api/v1');
+    expect(setCookie[0]).toContain('Max-Age=86400');
+
+    const guestToken = setCookie[0].split(';')[0].split('=')[1];
+    guestTokenHash = createHash('sha256').update(guestToken).digest('hex');
+    const savedSession = await prisma.guestSession.findUnique({
+      where: {
+        tokenHash: guestTokenHash,
+      },
+    });
+
+    expect(savedSession).not.toBeNull();
+    expect(savedSession?.tokenHash).not.toBe(guestToken);
   });
 
   it('POST /api/v1/auth/signup 요청으로 회원을 생성한다', async () => {
@@ -223,6 +258,13 @@ describe('AppController (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (guestTokenHash) {
+      await prisma.guestSession.deleteMany({
+        where: {
+          tokenHash: guestTokenHash,
+        },
+      });
+    }
     await prisma.user.deleteMany({
       where: {
         email: signupEmail,
