@@ -13,6 +13,7 @@ describe('RoomsService', () => {
   const roomCreate = jest.fn();
   const roomDelete = jest.fn();
   const roomUpdate = jest.fn();
+  const roomUpdateMany = jest.fn();
   const roomFindUnique = jest.fn();
   const roomFindMany = jest.fn();
   const roomCount = jest.fn();
@@ -29,6 +30,7 @@ describe('RoomsService', () => {
       create: roomCreate,
       delete: roomDelete,
       update: roomUpdate,
+      updateMany: roomUpdateMany,
       findUnique: roomFindUnique,
       findMany: roomFindMany,
       count: roomCount,
@@ -98,6 +100,7 @@ describe('RoomsService', () => {
       allowMidJoin: dto.allowMidJoin,
       createdAt,
     });
+    roomUpdateMany.mockResolvedValue({ count: 1 });
     transaction.mockImplementation(
       async (callback: (transaction: PrismaService) => Promise<unknown>) =>
         callback(prisma),
@@ -544,6 +547,140 @@ describe('RoomsService', () => {
     });
   });
 
+  it('모든 참가자가 준비되면 방장이 게임을 시작한다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'host-participant-id',
+      room: {
+        ...joinableRoom,
+        participants: [
+          ...joinableRoom.participants,
+          {
+            id: 'participant-id',
+            nickname: '참가자',
+            score: 0,
+            isReady: true,
+          },
+        ],
+      },
+    });
+
+    const result = await roomsService.start(
+      { type: 'GUEST', guestSessionId: 'host-session-id' },
+      'ABC234',
+    );
+
+    expect(roomUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'room-id',
+        status: RoomStatus.WAITING,
+      },
+      data: {
+        status: RoomStatus.PLAYING,
+        startedAt: expect.any(Date),
+      },
+    });
+    expect(result.status).toBe(RoomStatus.PLAYING);
+    expect(result.playerCount).toBe(2);
+  });
+
+  it('일반 참가자는 게임을 시작할 수 없다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'participant-id',
+      room: {
+        ...joinableRoom,
+        participants: [
+          ...joinableRoom.participants,
+          {
+            id: 'participant-id',
+            nickname: '참가자',
+            score: 0,
+            isReady: true,
+          },
+        ],
+      },
+    });
+
+    const error = await getStartRoomError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.FORBIDDEN);
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_ONLY_HOST_CAN_START',
+      message: '방장만 게임을 시작할 수 있습니다.',
+    });
+  });
+
+  it('참가자가 1명이면 게임을 시작할 수 없다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'host-participant-id',
+      room: joinableRoom,
+    });
+
+    const error = await getStartRoomError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+    );
+
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_NOT_ENOUGH_PARTICIPANTS',
+      message: '게임을 시작하려면 참가자가 2명 이상이어야 합니다.',
+    });
+  });
+
+  it('준비하지 않은 참가자가 있으면 게임을 시작할 수 없다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'host-participant-id',
+      room: {
+        ...joinableRoom,
+        participants: [
+          ...joinableRoom.participants,
+          {
+            id: 'participant-id',
+            nickname: '참가자',
+            score: 0,
+            isReady: false,
+          },
+        ],
+      },
+    });
+
+    const error = await getStartRoomError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+    );
+
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_PARTICIPANTS_NOT_READY',
+      message: '아직 준비하지 않은 참가자가 있습니다.',
+    });
+  });
+
+  it('대기 상태가 아닌 방은 게임을 시작할 수 없다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'host-participant-id',
+      room: {
+        ...joinableRoom,
+        status: RoomStatus.PLAYING,
+      },
+    });
+
+    const error = await getStartRoomError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+    );
+
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_START_NOT_ALLOWED',
+      message: '대기 중인 방만 게임을 시작할 수 있습니다.',
+    });
+  });
+
   it('일반 참가자가 방을 나가면 참가자 정보만 삭제한다', async () => {
     roomParticipantFindFirst.mockResolvedValue({
       id: 'participant-id',
@@ -700,6 +837,24 @@ async function getUpdateReadyError(
 ): Promise<AppException> {
   try {
     await roomsService.updateReady(actor, code, { isReady });
+  } catch (error) {
+    if (error instanceof AppException) {
+      return error;
+    }
+  }
+
+  throw new Error('AppException이 발생하지 않았습니다.');
+}
+
+async function getStartRoomError(
+  roomsService: RoomsService,
+  actor:
+    | { type: 'USER'; userId: string }
+    | { type: 'GUEST'; guestSessionId: string },
+  code: string,
+): Promise<AppException> {
+  try {
+    await roomsService.start(actor, code);
   } catch (error) {
     if (error instanceof AppException) {
       return error;

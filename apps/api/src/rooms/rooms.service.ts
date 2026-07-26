@@ -329,6 +329,105 @@ export class RoomsService {
     );
   }
 
+  async start(
+    actor: RequestActor,
+    code: string,
+  ): Promise<RoomDetailResponseDto> {
+    return this.prisma.$transaction(async (transaction) => {
+      const participant = await transaction.roomParticipant.findFirst({
+        where: {
+          room: { code },
+          ...(actor.type === 'USER'
+            ? { userId: actor.userId }
+            : { guestSessionId: actor.guestSessionId }),
+        },
+        select: {
+          id: true,
+          room: {
+            select: {
+              id: true,
+              code: true,
+              title: true,
+              status: true,
+              visibility: true,
+              maxPlayers: true,
+              allowMidJoin: true,
+              hostParticipantId: true,
+              createdAt: true,
+              hostParticipant: {
+                select: {
+                  id: true,
+                  nickname: true,
+                },
+              },
+              participants: {
+                orderBy: { joinedAt: 'asc' },
+                select: {
+                  id: true,
+                  nickname: true,
+                  score: true,
+                  isReady: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!participant) {
+        throw new AppException(ROOM_ERROR.PARTICIPANT_NOT_FOUND);
+      }
+
+      const { room } = participant;
+      const { hostParticipant } = room;
+
+      if (!hostParticipant) {
+        throw new AppException(ROOM_ERROR.NOT_FOUND);
+      }
+
+      if (participant.id !== room.hostParticipantId) {
+        throw new AppException(ROOM_ERROR.ONLY_HOST_CAN_START);
+      }
+
+      if (room.status !== RoomStatus.WAITING) {
+        throw new AppException(ROOM_ERROR.START_NOT_ALLOWED);
+      }
+
+      if (room.participants.length < 2) {
+        throw new AppException(ROOM_ERROR.NOT_ENOUGH_PARTICIPANTS);
+      }
+
+      const hasUnreadyParticipant = room.participants.some(
+        (item) => item.id !== room.hostParticipantId && !item.isReady,
+      );
+
+      if (hasUnreadyParticipant) {
+        throw new AppException(ROOM_ERROR.PARTICIPANTS_NOT_READY);
+      }
+
+      const updated = await transaction.room.updateMany({
+        where: {
+          id: room.id,
+          status: RoomStatus.WAITING,
+        },
+        data: {
+          status: RoomStatus.PLAYING,
+          startedAt: new Date(),
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw new AppException(ROOM_ERROR.START_NOT_ALLOWED);
+      }
+
+      return new RoomDetailResponseDto({
+        ...room,
+        status: RoomStatus.PLAYING,
+        hostParticipant,
+      });
+    });
+  }
+
   private async createRoomTransaction(
     actor: RequestActor,
     dto: CreateRoomDto,

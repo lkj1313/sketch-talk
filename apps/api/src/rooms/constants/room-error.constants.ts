@@ -26,6 +26,26 @@ export const ROOM_ERROR = {
     code: 'ROOM_READY_NOT_CHANGEABLE',
     message: '대기 중인 방에서만 준비 상태를 변경할 수 있습니다.',
   },
+  ONLY_HOST_CAN_START: {
+    statusCode: HttpStatus.FORBIDDEN,
+    code: 'ROOM_ONLY_HOST_CAN_START',
+    message: '방장만 게임을 시작할 수 있습니다.',
+  },
+  START_NOT_ALLOWED: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ROOM_START_NOT_ALLOWED',
+    message: '대기 중인 방만 게임을 시작할 수 있습니다.',
+  },
+  NOT_ENOUGH_PARTICIPANTS: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ROOM_NOT_ENOUGH_PARTICIPANTS',
+    message: '게임을 시작하려면 참가자가 2명 이상이어야 합니다.',
+  },
+  PARTICIPANTS_NOT_READY: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ROOM_PARTICIPANTS_NOT_READY',
+    message: '아직 준비하지 않은 참가자가 있습니다.',
+  },
   FULL: {
     statusCode: HttpStatus.CONFLICT,
     code: 'ROOM_FULL',

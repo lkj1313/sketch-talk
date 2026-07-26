@@ -49,6 +49,17 @@ export class RoomsController {
   }
 
   @UseGuards(ActorGuard)
+  @Post(':code/start')
+  async start(
+    @CurrentActor() actor: RequestActor,
+    @Param() params: RoomCodeParamDto,
+  ): Promise<ControllerResponse<RoomDetailResponseDto>> {
+    const room = await this.roomsService.start(actor, params.code);
+
+    return { data: room };
+  }
+
+  @UseGuards(ActorGuard)
   @Patch(':code/participants/me/ready')
   async updateReady(
     @CurrentActor() actor: RequestActor,

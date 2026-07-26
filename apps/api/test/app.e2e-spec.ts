@@ -440,6 +440,85 @@ describe('AppController (e2e)', () => {
       .expect(400);
   });
 
+  it('참가자가 1명인 방은 게임을 시작할 수 없다', () => {
+    return request(app.getHttpServer())
+      .post(`/api/v1/rooms/${privateRoomCode}/start`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(409)
+      .expect({
+        success: false,
+        statusCode: 409,
+        error: {
+          code: 'ROOM_NOT_ENOUGH_PARTICIPANTS',
+          message: '게임을 시작하려면 참가자가 2명 이상이어야 합니다.',
+        },
+      });
+  });
+
+  it('준비하지 않은 참가자가 있으면 게임을 시작할 수 없다', () => {
+    return guestAgent
+      .post(`/api/v1/rooms/${publicRoomCode}/start`)
+      .expect(409)
+      .expect({
+        success: false,
+        statusCode: 409,
+        error: {
+          code: 'ROOM_PARTICIPANTS_NOT_READY',
+          message: '아직 준비하지 않은 참가자가 있습니다.',
+        },
+      });
+  });
+
+  it('일반 참가자는 게임을 시작할 수 없다', () => {
+    return joiningGuestAgent
+      .post(`/api/v1/rooms/${publicRoomCode}/start`)
+      .expect(403)
+      .expect({
+        success: false,
+        statusCode: 403,
+        error: {
+          code: 'ROOM_ONLY_HOST_CAN_START',
+          message: '방장만 게임을 시작할 수 있습니다.',
+        },
+      });
+  });
+
+  it('모든 참가자가 준비되면 방장이 게임을 시작한다', async () => {
+    await joiningGuestAgent
+      .patch(`/api/v1/rooms/${publicRoomCode}/participants/me/ready`)
+      .send({ isReady: true })
+      .expect(200);
+
+    await guestAgent
+      .post(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/start`)
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: true,
+          statusCode: 201,
+          data: {
+            code: publicRoomCode,
+            status: 'PLAYING',
+            playerCount: 2,
+          },
+        });
+      });
+  });
+
+  it('이미 시작된 방은 다시 시작할 수 없다', () => {
+    return guestAgent
+      .post(`/api/v1/rooms/${publicRoomCode}/start`)
+      .expect(409)
+      .expect({
+        success: false,
+        statusCode: 409,
+        error: {
+          code: 'ROOM_START_NOT_ALLOWED',
+          message: '대기 중인 방만 게임을 시작할 수 있습니다.',
+        },
+      });
+  });
+
   it('방장이 나가면 남은 참가자에게 방장을 넘긴다', async () => {
     await guestAgent
       .delete(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/participants/me`)
