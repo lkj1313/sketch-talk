@@ -13,8 +13,10 @@ describe('AppController (e2e)', () => {
   let accessToken: string;
   let loginRefreshCookie: string;
   let guestTokenHash: string | undefined;
+  let joiningGuestTokenHash: string | undefined;
   let agent: ReturnType<typeof request.agent>;
   let guestAgent: ReturnType<typeof request.agent>;
+  let joiningGuestAgent: ReturnType<typeof request.agent>;
   let publicRoomCode: string;
   let privateRoomCode: string;
   const createdRoomIds: string[] = [];
@@ -32,6 +34,7 @@ describe('AppController (e2e)', () => {
     prisma = app.get(PrismaService);
     agent = request.agent(app.getHttpServer());
     guestAgent = request.agent(app.getHttpServer());
+    joiningGuestAgent = request.agent(app.getHttpServer());
   });
 
   it('GET /api/v1 요청에 공통 성공 응답을 반환한다', () => {
@@ -120,6 +123,78 @@ describe('AppController (e2e)', () => {
     });
     publicRoomCode = response.body.data.code as string;
     createdRoomIds.push(response.body.data.id as string);
+  });
+
+  it('방에 참가할 비회원 세션을 발급한다', async () => {
+    const response = await joiningGuestAgent
+      .post('/api/v1/guest-sessions')
+      .expect(201);
+    const setCookie = response.headers['set-cookie'] as string[];
+    const guestToken = setCookie[0].split(';')[0].split('=')[1];
+
+    joiningGuestTokenHash = createHash('sha256')
+      .update(guestToken)
+      .digest('hex');
+  });
+
+  it('비회원이 닉네임 없이 방에 참가하면 400 오류를 반환한다', () => {
+    return joiningGuestAgent
+      .post(`/api/v1/rooms/${publicRoomCode}/participants`)
+      .send({})
+      .expect(400)
+      .expect({
+        success: false,
+        statusCode: 400,
+        error: {
+          code: 'ROOM_GUEST_NICKNAME_REQUIRED',
+          message: '비회원은 닉네임이 필요합니다.',
+        },
+      });
+  });
+
+  it('비회원이 초대 코드와 닉네임으로 방에 참가한다', async () => {
+    const response = await joiningGuestAgent
+      .post(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/participants`)
+      .send({ nickname: ' 참가자123 ' })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 201,
+      data: {
+        room: {
+          code: publicRoomCode,
+          playerCount: 2,
+          participants: expect.arrayContaining([
+            expect.objectContaining({
+              nickname: '참가자123',
+              isHost: false,
+            }),
+          ]),
+        },
+        participant: {
+          nickname: '참가자123',
+          score: 0,
+          isReady: false,
+          isHost: false,
+        },
+      },
+    });
+  });
+
+  it('이미 방에 참가한 비회원의 중복 참가를 거절한다', () => {
+    return joiningGuestAgent
+      .post(`/api/v1/rooms/${publicRoomCode}/participants`)
+      .send({ nickname: '다른닉네임' })
+      .expect(409)
+      .expect({
+        success: false,
+        statusCode: 409,
+        error: {
+          code: 'ROOM_ALREADY_IN_ROOM',
+          message: '이미 다른 방에 참가 중입니다.',
+        },
+      });
   });
 
   it('POST /api/v1/auth/signup 요청으로 회원을 생성한다', async () => {
@@ -265,7 +340,7 @@ describe('AppController (e2e)', () => {
         expect.objectContaining({
           code: publicRoomCode,
           visibility: 'PUBLIC',
-          playerCount: 1,
+          playerCount: 2,
         }),
       ]),
     );
@@ -440,10 +515,14 @@ describe('AppController (e2e)', () => {
         },
       },
     });
-    if (guestTokenHash) {
+    if (guestTokenHash || joiningGuestTokenHash) {
       await prisma.guestSession.deleteMany({
         where: {
-          tokenHash: guestTokenHash,
+          tokenHash: {
+            in: [guestTokenHash, joiningGuestTokenHash].filter(
+              (value): value is string => value !== undefined,
+            ),
+          },
         },
       });
     }

@@ -40,6 +40,29 @@ describe('RoomsService', () => {
     maxPlayers: 8,
     allowMidJoin: true,
   };
+  const joinableRoom = {
+    id: 'room-id',
+    code: 'ABC234',
+    title: dto.title,
+    status: RoomStatus.WAITING,
+    visibility: RoomVisibility.PUBLIC,
+    maxPlayers: 8,
+    allowMidJoin: true,
+    hostParticipantId: 'host-participant-id',
+    createdAt,
+    hostParticipant: {
+      id: 'host-participant-id',
+      nickname: '방장',
+    },
+    participants: [
+      {
+        id: 'host-participant-id',
+        nickname: '방장',
+        score: 0,
+        isReady: false,
+      },
+    ],
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -275,6 +298,133 @@ describe('RoomsService', () => {
       message: '방을 찾을 수 없습니다.',
     });
   });
+
+  it('회원의 계정 닉네임으로 방에 참가한다', async () => {
+    userFindUnique.mockResolvedValue({ nickname: '회원닉네임' });
+    roomFindUnique.mockResolvedValue(joinableRoom);
+    roomParticipantCreate.mockResolvedValue({
+      id: 'joined-participant-id',
+      nickname: '회원닉네임',
+      score: 0,
+      isReady: false,
+    });
+
+    const result = await roomsService.join(
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+      {},
+    );
+
+    expect(roomParticipantCreate).toHaveBeenCalledWith({
+      data: {
+        roomId: 'room-id',
+        nickname: '회원닉네임',
+        userId: 'user-id',
+      },
+      select: {
+        id: true,
+        nickname: true,
+        score: true,
+        isReady: true,
+      },
+    });
+    expect(result.participant).toEqual({
+      id: 'joined-participant-id',
+      nickname: '회원닉네임',
+      score: 0,
+      isReady: false,
+      isHost: false,
+    });
+    expect(result.room.playerCount).toBe(2);
+  });
+
+  it('비회원 닉네임이 없으면 방 참가를 거절한다', async () => {
+    const error = await getJoinRoomError(
+      roomsService,
+      { type: 'GUEST', guestSessionId: 'guest-session-id' },
+      'ABC234',
+      {},
+    );
+
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_GUEST_NICKNAME_REQUIRED',
+      message: '비회원은 닉네임이 필요합니다.',
+    });
+  });
+
+  it('정원이 가득 찬 방은 참가를 거절한다', async () => {
+    roomFindUnique.mockResolvedValue({
+      ...joinableRoom,
+      maxPlayers: 1,
+    });
+
+    const error = await getJoinRoomError(
+      roomsService,
+      { type: 'GUEST', guestSessionId: 'guest-session-id' },
+      'ABC234',
+      { nickname: '게스트' },
+    );
+
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_FULL',
+      message: '방의 정원이 가득 찼습니다.',
+    });
+  });
+
+  it('중간 참가를 허용하지 않은 진행 중인 방은 참가를 거절한다', async () => {
+    roomFindUnique.mockResolvedValue({
+      ...joinableRoom,
+      status: RoomStatus.PLAYING,
+      allowMidJoin: false,
+    });
+
+    const error = await getJoinRoomError(
+      roomsService,
+      { type: 'GUEST', guestSessionId: 'guest-session-id' },
+      'ABC234',
+      { nickname: '게스트' },
+    );
+
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_MID_JOIN_NOT_ALLOWED',
+      message: '게임이 시작된 후에는 참가할 수 없는 방입니다.',
+    });
+  });
+
+  it('종료되거나 닫힌 방은 참가를 거절한다', async () => {
+    roomFindUnique.mockResolvedValue({
+      ...joinableRoom,
+      status: RoomStatus.CLOSED,
+    });
+
+    const error = await getJoinRoomError(
+      roomsService,
+      { type: 'GUEST', guestSessionId: 'guest-session-id' },
+      'ABC234',
+      { nickname: '게스트' },
+    );
+
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_NOT_JOINABLE',
+      message: '참가할 수 없는 상태의 방입니다.',
+    });
+  });
+
+  it('방에서 사용 중인 닉네임은 대소문자와 관계없이 거절한다', async () => {
+    roomFindUnique.mockResolvedValue(joinableRoom);
+
+    const error = await getJoinRoomError(
+      roomsService,
+      { type: 'GUEST', guestSessionId: 'guest-session-id' },
+      'ABC234',
+      { nickname: '방장' },
+    );
+
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_NICKNAME_DUPLICATED',
+      message: '방에서 이미 사용 중인 닉네임입니다.',
+    });
+  });
 });
 
 async function getCreateRoomError(
@@ -301,6 +451,25 @@ async function getFindRoomError(
 ): Promise<AppException> {
   try {
     await roomsService.findByCode(code);
+  } catch (error) {
+    if (error instanceof AppException) {
+      return error;
+    }
+  }
+
+  throw new Error('AppException이 발생하지 않았습니다.');
+}
+
+async function getJoinRoomError(
+  roomsService: RoomsService,
+  actor:
+    | { type: 'USER'; userId: string }
+    | { type: 'GUEST'; guestSessionId: string },
+  code: string,
+  dto: { nickname?: string },
+): Promise<AppException> {
+  try {
+    await roomsService.join(actor, code, dto);
   } catch (error) {
     if (error instanceof AppException) {
       return error;

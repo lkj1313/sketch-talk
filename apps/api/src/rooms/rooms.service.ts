@@ -8,6 +8,8 @@ import { ROOM_CODE_GENERATION_MAX_ATTEMPTS } from '@/rooms/constants/room.consta
 import { ROOM_ERROR } from '@/rooms/constants/room-error.constants';
 import { CreateRoomDto } from '@/rooms/dto/create-room.dto';
 import { GetRoomsQueryDto } from '@/rooms/dto/get-rooms-query.dto';
+import { JoinRoomDto } from '@/rooms/dto/join-room.dto';
+import { JoinRoomResponseDto } from '@/rooms/dto/join-room-response.dto';
 import { RoomDetailResponseDto } from '@/rooms/dto/room-detail-response.dto';
 import { RoomResponseDto } from '@/rooms/dto/room-response.dto';
 import { createRoomCode } from '@/rooms/utils/room-code.util';
@@ -140,6 +142,75 @@ export class RoomsService {
     });
   }
 
+  async join(
+    actor: RequestActor,
+    code: string,
+    dto: JoinRoomDto,
+  ): Promise<JoinRoomResponseDto> {
+    await this.ensureNotInRoom(actor);
+    const nickname = await this.resolveNickname(actor, dto.nickname);
+
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const room = await transaction.room.findUnique({
+          where: { code },
+          include: {
+            participants: {
+              orderBy: { joinedAt: 'asc' },
+              select: {
+                id: true,
+                nickname: true,
+                score: true,
+                isReady: true,
+              },
+            },
+            hostParticipant: {
+              select: {
+                id: true,
+                nickname: true,
+              },
+            },
+          },
+        });
+
+        if (!room || !room.hostParticipant) {
+          throw new AppException(ROOM_ERROR.NOT_FOUND);
+        }
+
+        this.validateJoinableRoom(room, nickname);
+
+        const participant = await transaction.roomParticipant.create({
+          data: {
+            roomId: room.id,
+            nickname,
+            ...(actor.type === 'USER'
+              ? { userId: actor.userId }
+              : { guestSessionId: actor.guestSessionId }),
+          },
+          select: {
+            id: true,
+            nickname: true,
+            score: true,
+            isReady: true,
+          },
+        });
+        const detail = new RoomDetailResponseDto({
+          ...room,
+          participants: [...room.participants, participant],
+          hostParticipant: room.hostParticipant,
+        });
+
+        return new JoinRoomResponseDto(detail, participant.id);
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new AppException(ROOM_ERROR.ALREADY_IN_ROOM);
+      }
+
+      throw error;
+    }
+  }
+
   private async createRoomTransaction(
     actor: RequestActor,
     dto: CreateRoomDto,
@@ -185,6 +256,38 @@ export class RoomsService {
 
     if (participant) {
       throw new AppException(ROOM_ERROR.ALREADY_IN_ROOM);
+    }
+  }
+
+  private validateJoinableRoom(
+    room: {
+      status: string;
+      allowMidJoin: boolean;
+      maxPlayers: number;
+      participants: Array<{ nickname: string }>;
+    },
+    nickname: string,
+  ): void {
+    if (room.status === 'FINISHED' || room.status === 'CLOSED') {
+      throw new AppException(ROOM_ERROR.NOT_JOINABLE);
+    }
+
+    if (room.status === 'PLAYING' && !room.allowMidJoin) {
+      throw new AppException(ROOM_ERROR.MID_JOIN_NOT_ALLOWED);
+    }
+
+    if (room.participants.length >= room.maxPlayers) {
+      throw new AppException(ROOM_ERROR.FULL);
+    }
+
+    if (
+      room.participants.some(
+        (participant) =>
+          participant.nickname.toLocaleLowerCase() ===
+          nickname.toLocaleLowerCase(),
+      )
+    ) {
+      throw new AppException(ROOM_ERROR.NICKNAME_DUPLICATED);
     }
   }
 
