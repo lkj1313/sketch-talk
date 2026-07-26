@@ -1,6 +1,11 @@
 import { HttpStatus } from '@nestjs/common';
 
 export const AUTH_ERROR = {
+  ACTOR_REQUIRED: {
+    statusCode: HttpStatus.UNAUTHORIZED,
+    code: 'AUTH_ACTOR_REQUIRED',
+    message: '회원 Access Token 또는 비회원 Guest Token이 필요합니다.',
+  },
   REFRESH_TOKEN_REQUIRED: {
     statusCode: HttpStatus.UNAUTHORIZED,
     code: 'AUTH_REFRESH_TOKEN_REQUIRED',
