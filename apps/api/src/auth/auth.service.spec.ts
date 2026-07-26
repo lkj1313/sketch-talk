@@ -17,6 +17,10 @@ describe('AuthService', () => {
   const userCreate = jest.fn();
   const userFindUnique = jest.fn();
   const userUpdate = jest.fn();
+  const authSessionCreate = jest.fn();
+  const authSessionFindUnique = jest.fn();
+  const authSessionUpdateMany = jest.fn();
+  const transaction = jest.fn();
   const signAsync = jest.fn();
   const prisma = {
     user: {
@@ -24,6 +28,12 @@ describe('AuthService', () => {
       findUnique: userFindUnique,
       update: userUpdate,
     },
+    authSession: {
+      create: authSessionCreate,
+      findUnique: authSessionFindUnique,
+      updateMany: authSessionUpdateMany,
+    },
+    $transaction: transaction,
   } as unknown as PrismaService;
   const jwtService = {
     signAsync,
@@ -75,6 +85,7 @@ describe('AuthService', () => {
     userFindUnique.mockResolvedValue(user);
     signAsync.mockResolvedValue('access-token');
     userUpdate.mockResolvedValue(user);
+    authSessionCreate.mockResolvedValue({});
 
     await expect(
       authService.login({
@@ -82,14 +93,17 @@ describe('AuthService', () => {
         password: signupDto.password,
       }),
     ).resolves.toEqual({
-      accessToken: 'access-token',
-      user: {
-        id: user.id,
-        email: user.email,
-        nickname: user.nickname,
-        avatarUrl: user.avatarUrl,
-        createdAt: user.createdAt,
+      result: {
+        accessToken: 'access-token',
+        user: {
+          id: user.id,
+          email: user.email,
+          nickname: user.nickname,
+          avatarUrl: user.avatarUrl,
+          createdAt: user.createdAt,
+        },
       },
+      refreshToken: expect.any(String),
     });
     expect(signAsync).toHaveBeenCalledWith({
       sub: user.id,
@@ -101,6 +115,76 @@ describe('AuthService', () => {
       data: {
         lastLoginAt: expect.any(Date),
       },
+    });
+    expect(authSessionCreate).toHaveBeenCalledWith({
+      data: {
+        userId: user.id,
+        tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        expiresAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('Refresh Token을 회전하고 새 Access Token을 반환한다', async () => {
+    authSessionFindUnique.mockResolvedValue({
+      id: 'session-id',
+      userId: 'user-id',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+    });
+    authSessionUpdateMany.mockResolvedValue({ count: 1 });
+    authSessionCreate.mockResolvedValue({});
+    signAsync.mockResolvedValue('new-access-token');
+    transaction.mockImplementation(
+      async (callback: (transaction: PrismaService) => Promise<unknown>) =>
+        callback(prisma),
+    );
+
+    await expect(authService.refresh('refresh-token')).resolves.toEqual({
+      result: {
+        accessToken: 'new-access-token',
+      },
+      refreshToken: expect.any(String),
+    });
+    expect(authSessionUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'session-id' }),
+        data: { revokedAt: expect.any(Date) },
+      }),
+    );
+    expect(authSessionCreate).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-id',
+        tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        expiresAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('Refresh Token이 없으면 AUTH_REFRESH_TOKEN_REQUIRED 오류를 발생시킨다', async () => {
+    const error = await getRefreshError(authService, undefined);
+
+    expect(error.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+    expect(error.getResponse()).toEqual({
+      code: 'AUTH_REFRESH_TOKEN_REQUIRED',
+      message: 'Refresh Token이 필요합니다.',
+    });
+  });
+
+  it('만료된 Refresh Token이면 AUTH_INVALID_REFRESH_TOKEN 오류를 발생시킨다', async () => {
+    authSessionFindUnique.mockResolvedValue({
+      id: 'session-id',
+      userId: 'user-id',
+      expiresAt: new Date(Date.now() - 60_000),
+      revokedAt: null,
+    });
+
+    const error = await getRefreshError(authService, 'expired-token');
+
+    expect(error.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+    expect(error.getResponse()).toEqual({
+      code: 'AUTH_INVALID_REFRESH_TOKEN',
+      message: '유효하지 않거나 만료된 Refresh Token입니다.',
     });
   });
 
@@ -227,6 +311,21 @@ async function getMeError(
 ): Promise<AppException> {
   try {
     await authService.getMe(userId);
+  } catch (error) {
+    if (error instanceof AppException) {
+      return error;
+    }
+  }
+
+  throw new Error('AppException이 발생하지 않았습니다.');
+}
+
+async function getRefreshError(
+  authService: AuthService,
+  refreshToken: string | undefined,
+): Promise<AppException> {
+  try {
+    await authService.refresh(refreshToken);
   } catch (error) {
     if (error instanceof AppException) {
       return error;

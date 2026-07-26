@@ -3,12 +3,14 @@ import {
   ValidationPipe,
   VersioningType,
 } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { COMMON_ERROR } from '@/common/constants/common-error';
 import { AppException } from '@/common/exceptions/app.exception';
 import { GlobalExceptionFilter } from '@/common/filters/global-exception.filter';
 import { ResponseInterceptor } from '@/common/interceptors/response.interceptor';
 
 export function configureApp(app: INestApplication): void {
+  app.use(cookieParser());
   app.setGlobalPrefix('api');
   app.enableVersioning({
     type: VersioningType.URI,

@@ -1,6 +1,16 @@
 import { HttpStatus } from '@nestjs/common';
 
 export const AUTH_ERROR = {
+  REFRESH_TOKEN_REQUIRED: {
+    statusCode: HttpStatus.UNAUTHORIZED,
+    code: 'AUTH_REFRESH_TOKEN_REQUIRED',
+    message: 'Refresh Token이 필요합니다.',
+  },
+  INVALID_REFRESH_TOKEN: {
+    statusCode: HttpStatus.UNAUTHORIZED,
+    code: 'AUTH_INVALID_REFRESH_TOKEN',
+    message: '유효하지 않거나 만료된 Refresh Token입니다.',
+  },
   ACCESS_TOKEN_REQUIRED: {
     statusCode: HttpStatus.UNAUTHORIZED,
     code: 'AUTH_ACCESS_TOKEN_REQUIRED',

@@ -12,10 +12,17 @@ import { SignupDto } from '@/auth/dto/signup.dto';
 import { AppException } from '@/common/exceptions/app.exception';
 import { Prisma } from '@/generated/prisma/client';
 import {
+  AuthResultWithRefreshToken,
   AccessTokenPayload,
   LoginResult,
+  RefreshResult,
   SignupUser,
 } from '@/auth/types/auth-response.type';
+import {
+  createRefreshToken,
+  hashRefreshToken,
+} from '@/auth/utils/refresh-token.util';
+import { REFRESH_TOKEN_EXPIRES_IN_MS } from '@/auth/constants/auth.constants';
 
 @Injectable()
 export class AuthService {
@@ -54,7 +61,7 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto): Promise<LoginResult> {
+  async login(dto: LoginDto): Promise<AuthResultWithRefreshToken<LoginResult>> {
     const user = await this.prisma.user.findUnique({
       where: {
         email: dto.email,
@@ -78,6 +85,8 @@ export class AuthService {
     const payload: AccessTokenPayload = {
       sub: user.id,
     };
+    const refreshToken = createRefreshToken();
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN_MS);
     const [accessToken] = await Promise.all([
       this.jwtService.signAsync(payload),
       this.prisma.user.update({
@@ -88,18 +97,107 @@ export class AuthService {
           lastLoginAt: new Date(),
         },
       }),
+      this.prisma.authSession.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashRefreshToken(refreshToken),
+          expiresAt,
+        },
+      }),
     ]);
 
     return {
-      accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        nickname: user.nickname,
-        avatarUrl: user.avatarUrl,
-        createdAt: user.createdAt,
+      result: {
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          nickname: user.nickname,
+          avatarUrl: user.avatarUrl,
+          createdAt: user.createdAt,
+        },
       },
+      refreshToken,
     };
+  }
+
+  async refresh(
+    refreshToken: string | undefined,
+  ): Promise<AuthResultWithRefreshToken<RefreshResult>> {
+    if (!refreshToken) {
+      throw new AppException(AUTH_ERROR.REFRESH_TOKEN_REQUIRED);
+    }
+
+    const now = new Date();
+    const session = await this.prisma.authSession.findUnique({
+      where: {
+        tokenHash: hashRefreshToken(refreshToken),
+      },
+      select: {
+        id: true,
+        userId: true,
+        expiresAt: true,
+        revokedAt: true,
+      },
+    });
+
+    if (!session || session.revokedAt || session.expiresAt <= now) {
+      throw new AppException(AUTH_ERROR.INVALID_REFRESH_TOKEN);
+    }
+
+    const nextRefreshToken = createRefreshToken();
+    const nextExpiresAt = new Date(now.getTime() + REFRESH_TOKEN_EXPIRES_IN_MS);
+    const accessToken = await this.jwtService.signAsync({
+      sub: session.userId,
+    });
+
+    await this.prisma.$transaction(async (transaction) => {
+      const revokedSession = await transaction.authSession.updateMany({
+        where: {
+          id: session.id,
+          revokedAt: null,
+          expiresAt: {
+            gt: now,
+          },
+        },
+        data: {
+          revokedAt: now,
+        },
+      });
+
+      if (revokedSession.count !== 1) {
+        throw new AppException(AUTH_ERROR.INVALID_REFRESH_TOKEN);
+      }
+
+      await transaction.authSession.create({
+        data: {
+          userId: session.userId,
+          tokenHash: hashRefreshToken(nextRefreshToken),
+          expiresAt: nextExpiresAt,
+        },
+      });
+    });
+
+    return {
+      result: { accessToken },
+      refreshToken: nextRefreshToken,
+    };
+  }
+
+  async logout(refreshToken: string | undefined): Promise<void> {
+    if (!refreshToken) {
+      return;
+    }
+
+    await this.prisma.authSession.updateMany({
+      where: {
+        tokenHash: hashRefreshToken(refreshToken),
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
   }
 
   async getMe(userId: string): Promise<SignupUser> {
