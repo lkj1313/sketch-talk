@@ -7,6 +7,8 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { ROOM_CODE_GENERATION_MAX_ATTEMPTS } from '@/rooms/constants/room.constants';
 import { ROOM_ERROR } from '@/rooms/constants/room-error.constants';
 import { CreateRoomDto } from '@/rooms/dto/create-room.dto';
+import { GetRoomsQueryDto } from '@/rooms/dto/get-rooms-query.dto';
+import { RoomDetailResponseDto } from '@/rooms/dto/room-detail-response.dto';
 import { RoomResponseDto } from '@/rooms/dto/room-response.dto';
 import { createRoomCode } from '@/rooms/utils/room-code.util';
 
@@ -47,6 +49,95 @@ export class RoomsService {
     }
 
     throw new AppException(ROOM_ERROR.CODE_GENERATION_FAILED);
+  }
+
+  async findAll(dto: GetRoomsQueryDto): Promise<{
+    rooms: RoomResponseDto[];
+    meta: {
+      total: number;
+      page: number;
+      pageSize: number;
+      hasNext: boolean;
+    };
+  }> {
+    const where: Prisma.RoomWhereInput = {
+      visibility: 'PUBLIC',
+      status: dto.status,
+      hostParticipantId: { not: null },
+    };
+    const [rooms, total] = await Promise.all([
+      this.prisma.room.findMany({
+        where,
+        skip: (dto.page - 1) * dto.pageSize,
+        take: dto.pageSize,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: {
+          hostParticipant: {
+            select: {
+              id: true,
+              nickname: true,
+            },
+          },
+          _count: {
+            select: {
+              participants: true,
+            },
+          },
+        },
+      }),
+      this.prisma.room.count({ where }),
+    ]);
+
+    return {
+      rooms: rooms
+        .filter((room) => room.hostParticipant !== null)
+        .map(
+          (room) =>
+            new RoomResponseDto(
+              room,
+              room.hostParticipant!,
+              room._count.participants,
+            ),
+        ),
+      meta: {
+        total,
+        page: dto.page,
+        pageSize: dto.pageSize,
+        hasNext: dto.page * dto.pageSize < total,
+      },
+    };
+  }
+
+  async findByCode(code: string): Promise<RoomDetailResponseDto> {
+    const room = await this.prisma.room.findUnique({
+      where: { code },
+      include: {
+        hostParticipant: {
+          select: {
+            id: true,
+            nickname: true,
+          },
+        },
+        participants: {
+          orderBy: { joinedAt: 'asc' },
+          select: {
+            id: true,
+            nickname: true,
+            score: true,
+            isReady: true,
+          },
+        },
+      },
+    });
+
+    if (!room || !room.hostParticipant) {
+      throw new AppException(ROOM_ERROR.NOT_FOUND);
+    }
+
+    return new RoomDetailResponseDto({
+      ...room,
+      hostParticipant: room.hostParticipant,
+    });
   }
 
   private async createRoomTransaction(

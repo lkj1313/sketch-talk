@@ -15,7 +15,11 @@ export type {
 export type { GuestSessionResponse } from "./guest-session.js";
 export type {
   CreateRoomRequest,
+  GetRoomsQuery,
+  RoomDetailResponse,
   RoomHostResponse,
+  RoomListStatus,
+  RoomParticipantResponse,
   RoomResponse,
   RoomStatus,
   RoomVisibility,

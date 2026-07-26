@@ -2,6 +2,8 @@ export type RoomStatus = "WAITING" | "PLAYING" | "FINISHED" | "CLOSED";
 
 export type RoomVisibility = "PUBLIC" | "PRIVATE";
 
+export type RoomListStatus = Extract<RoomStatus, "WAITING" | "PLAYING">;
+
 export interface CreateRoomRequest {
   title: string;
   visibility?: RoomVisibility;
@@ -26,4 +28,22 @@ export interface RoomResponse {
   playerCount: number;
   host: RoomHostResponse;
   createdAt: string;
+}
+
+export interface GetRoomsQuery {
+  page?: number;
+  pageSize?: number;
+  status?: RoomListStatus;
+}
+
+export interface RoomParticipantResponse {
+  id: string;
+  nickname: string;
+  score: number;
+  isReady: boolean;
+  isHost: boolean;
+}
+
+export interface RoomDetailResponse extends RoomResponse {
+  participants: RoomParticipantResponse[];
 }

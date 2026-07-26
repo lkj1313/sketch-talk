@@ -1,6 +1,11 @@
 import { HttpStatus } from '@nestjs/common';
 
 export const ROOM_ERROR = {
+  NOT_FOUND: {
+    statusCode: HttpStatus.NOT_FOUND,
+    code: 'ROOM_NOT_FOUND',
+    message: '방을 찾을 수 없습니다.',
+  },
   ALREADY_IN_ROOM: {
     statusCode: HttpStatus.CONFLICT,
     code: 'ROOM_ALREADY_IN_ROOM',

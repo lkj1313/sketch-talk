@@ -11,6 +11,8 @@ describe('RoomsService', () => {
   const roomCreate = jest.fn();
   const roomUpdate = jest.fn();
   const roomFindUnique = jest.fn();
+  const roomFindMany = jest.fn();
+  const roomCount = jest.fn();
   const userFindUnique = jest.fn();
   const transaction = jest.fn();
   const prisma = {
@@ -22,6 +24,8 @@ describe('RoomsService', () => {
       create: roomCreate,
       update: roomUpdate,
       findUnique: roomFindUnique,
+      findMany: roomFindMany,
+      count: roomCount,
     },
     user: {
       findUnique: userFindUnique,
@@ -154,6 +158,123 @@ describe('RoomsService', () => {
       message: '비회원은 닉네임이 필요합니다.',
     });
   });
+
+  it('공개 방 목록과 페이지 메타데이터를 반환한다', async () => {
+    roomFindMany.mockResolvedValue([
+      {
+        id: 'room-id',
+        code: 'ABC234',
+        title: dto.title,
+        status: RoomStatus.WAITING,
+        visibility: RoomVisibility.PUBLIC,
+        maxPlayers: 8,
+        allowMidJoin: true,
+        createdAt,
+        hostParticipant: {
+          id: 'participant-id',
+          nickname: '그림왕',
+        },
+        _count: {
+          participants: 3,
+        },
+      },
+    ]);
+    roomCount.mockResolvedValue(2);
+
+    await expect(
+      roomsService.findAll({
+        page: 1,
+        pageSize: 1,
+        status: RoomStatus.WAITING,
+      }),
+    ).resolves.toEqual({
+      rooms: [
+        {
+          id: 'room-id',
+          code: 'ABC234',
+          title: dto.title,
+          status: RoomStatus.WAITING,
+          visibility: RoomVisibility.PUBLIC,
+          maxPlayers: 8,
+          allowMidJoin: true,
+          playerCount: 3,
+          host: {
+            id: 'participant-id',
+            nickname: '그림왕',
+          },
+          createdAt: createdAt.toISOString(),
+        },
+      ],
+      meta: {
+        total: 2,
+        page: 1,
+        pageSize: 1,
+        hasNext: true,
+      },
+    });
+    expect(roomFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          visibility: 'PUBLIC',
+          status: RoomStatus.WAITING,
+          hostParticipantId: { not: null },
+        },
+        skip: 0,
+        take: 1,
+      }),
+    );
+  });
+
+  it('방 코드로 참가자 목록을 포함한 상세 정보를 반환한다', async () => {
+    roomFindUnique.mockResolvedValue({
+      id: 'room-id',
+      code: 'ABC234',
+      title: dto.title,
+      status: RoomStatus.WAITING,
+      visibility: RoomVisibility.PRIVATE,
+      maxPlayers: 8,
+      allowMidJoin: true,
+      hostParticipantId: 'participant-id',
+      createdAt,
+      hostParticipant: {
+        id: 'participant-id',
+        nickname: '그림왕',
+      },
+      participants: [
+        {
+          id: 'participant-id',
+          nickname: '그림왕',
+          score: 0,
+          isReady: false,
+        },
+      ],
+    });
+
+    const result = await roomsService.findByCode('ABC234');
+
+    expect(result.participants).toEqual([
+      {
+        id: 'participant-id',
+        nickname: '그림왕',
+        score: 0,
+        isReady: false,
+        isHost: true,
+      },
+    ]);
+    expect(result.visibility).toBe(RoomVisibility.PRIVATE);
+  });
+
+  it('방 코드가 존재하지 않으면 ROOM_NOT_FOUND 오류를 발생시킨다', async () => {
+    roomFindUnique.mockResolvedValue(null);
+
+    const error = await getFindRoomError(roomsService, 'ZZZZZZ');
+
+    expect(error.getStatus()).toBe(HttpStatus.NOT_FOUND);
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_NOT_FOUND',
+      message: '방을 찾을 수 없습니다.',
+    });
+  });
 });
 
 async function getCreateRoomError(
@@ -165,6 +286,21 @@ async function getCreateRoomError(
 ): Promise<AppException> {
   try {
     await roomsService.create(actor, dto);
+  } catch (error) {
+    if (error instanceof AppException) {
+      return error;
+    }
+  }
+
+  throw new Error('AppException이 발생하지 않았습니다.');
+}
+
+async function getFindRoomError(
+  roomsService: RoomsService,
+  code: string,
+): Promise<AppException> {
+  try {
+    await roomsService.findByCode(code);
   } catch (error) {
     if (error instanceof AppException) {
       return error;
