@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AUTH_ERROR } from '@/auth/constants/auth-error.constants';
 import type { RequestActor } from '@/auth/types/request-actor.type';
 import { AppException } from '@/common/exceptions/app.exception';
@@ -16,11 +17,15 @@ import {
 } from '@/rooms/dto/room-detail-response.dto';
 import { RoomResponseDto } from '@/rooms/dto/room-response.dto';
 import { UpdateReadyDto } from '@/rooms/dto/update-ready.dto';
+import { ROOM_DOMAIN_EVENT } from '@/rooms/events/room.events';
 import { createRoomCode } from '@/rooms/utils/room-code.util';
 
 @Injectable()
 export class RoomsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(
     actor: RequestActor,
@@ -155,7 +160,7 @@ export class RoomsService {
     const nickname = await this.resolveNickname(actor, dto.nickname);
 
     try {
-      return await this.prisma.$transaction(async (transaction) => {
+      const result = await this.prisma.$transaction(async (transaction) => {
         const room = await transaction.room.findUnique({
           where: { code },
           include: {
@@ -206,6 +211,14 @@ export class RoomsService {
 
         return new JoinRoomResponseDto(detail, participant.id);
       });
+
+      this.eventEmitter.emit(ROOM_DOMAIN_EVENT.PARTICIPANT_JOINED, {
+        roomCode: code,
+        participant: result.participant,
+        playerCount: result.room.playerCount,
+      });
+
+      return result;
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new AppException(ROOM_ERROR.ALREADY_IN_ROOM);
@@ -216,7 +229,7 @@ export class RoomsService {
   }
 
   async leave(actor: RequestActor, code: string): Promise<void> {
-    await this.prisma.$transaction(async (transaction) => {
+    const result = await this.prisma.$transaction(async (transaction) => {
       const participant = await transaction.roomParticipant.findFirst({
         where: {
           room: { code },
@@ -230,6 +243,9 @@ export class RoomsService {
           room: {
             select: {
               hostParticipantId: true,
+              _count: {
+                select: { participants: true },
+              },
             },
           },
         },
@@ -244,7 +260,12 @@ export class RoomsService {
           where: { id: participant.id },
         });
 
-        return;
+        return {
+          participantId: participant.id,
+          playerCount: participant.room._count.participants - 1,
+          roomDeleted: false,
+          nextHost: null,
+        };
       }
 
       const nextHost = await transaction.roomParticipant.findFirst({
@@ -253,7 +274,7 @@ export class RoomsService {
           id: { not: participant.id },
         },
         orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
-        select: { id: true },
+        select: { id: true, nickname: true },
       });
 
       if (!nextHost) {
@@ -261,7 +282,12 @@ export class RoomsService {
           where: { id: participant.roomId },
         });
 
-        return;
+        return {
+          participantId: participant.id,
+          playerCount: 0,
+          roomDeleted: true,
+          nextHost: null,
+        };
       }
 
       await transaction.room.update({
@@ -271,7 +297,28 @@ export class RoomsService {
       await transaction.roomParticipant.delete({
         where: { id: participant.id },
       });
+
+      return {
+        participantId: participant.id,
+        playerCount: participant.room._count.participants - 1,
+        roomDeleted: false,
+        nextHost,
+      };
     });
+
+    await this.eventEmitter.emitAsync(ROOM_DOMAIN_EVENT.PARTICIPANT_LEFT, {
+      roomCode: code,
+      participantId: result.participantId,
+      playerCount: result.playerCount,
+      roomDeleted: result.roomDeleted,
+    });
+
+    if (result.nextHost) {
+      await this.eventEmitter.emitAsync(ROOM_DOMAIN_EVENT.HOST_CHANGED, {
+        roomCode: code,
+        host: result.nextHost,
+      });
+    }
   }
 
   async updateReady(
@@ -323,17 +370,24 @@ export class RoomsService {
       },
     });
 
-    return new RoomParticipantResponseDto(
+    const response = new RoomParticipantResponseDto(
       updatedParticipant,
       participant.room.hostParticipantId,
     );
+
+    this.eventEmitter.emit(ROOM_DOMAIN_EVENT.READY_CHANGED, {
+      roomCode: code,
+      participant: response,
+    });
+
+    return response;
   }
 
   async start(
     actor: RequestActor,
     code: string,
   ): Promise<RoomDetailResponseDto> {
-    return this.prisma.$transaction(async (transaction) => {
+    const room = await this.prisma.$transaction(async (transaction) => {
       const participant = await transaction.roomParticipant.findFirst({
         where: {
           room: { code },
@@ -426,6 +480,13 @@ export class RoomsService {
         hostParticipant,
       });
     });
+
+    this.eventEmitter.emit(ROOM_DOMAIN_EVENT.GAME_STARTED, {
+      roomCode: code,
+      room,
+    });
+
+    return room;
   }
 
   private async createRoomTransaction(

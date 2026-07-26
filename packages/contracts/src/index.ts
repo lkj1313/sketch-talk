@@ -14,6 +14,15 @@ export type {
 } from "./api-response.js";
 export type { GuestSessionResponse } from "./guest-session.js";
 export type {
+  RealtimeErrorResponse,
+  RoomGameStartedEvent,
+  RoomHostChangedEvent,
+  RoomParticipantJoinedEvent,
+  RoomParticipantLeftEvent,
+  RoomReadyChangedEvent,
+  RoomSubscribeRequest,
+} from "./realtime.js";
+export type {
   CreateRoomRequest,
   GetRoomsQuery,
   JoinRoomRequest,

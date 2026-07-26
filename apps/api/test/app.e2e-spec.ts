@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { io, type Socket } from 'socket.io-client';
 import { AppModule } from '@/app.module';
 import { configureApp } from '@/app.setup';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -12,11 +13,17 @@ describe('AppController (e2e)', () => {
   let prisma: PrismaService;
   let accessToken: string;
   let loginRefreshCookie: string;
+  let guestCookie: string;
+  let joiningGuestCookie: string;
   let guestTokenHash: string | undefined;
   let joiningGuestTokenHash: string | undefined;
   let agent: ReturnType<typeof request.agent>;
   let guestAgent: ReturnType<typeof request.agent>;
   let joiningGuestAgent: ReturnType<typeof request.agent>;
+  let serverUrl: string;
+  let hostSocket: Socket;
+  let joiningGuestSocket: Socket;
+  let memberSocket: Socket;
   let publicRoomCode: string;
   let privateRoomCode: string;
   const createdRoomIds: string[] = [];
@@ -30,7 +37,8 @@ describe('AppController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     configureApp(app);
-    await app.init();
+    await app.listen(0);
+    serverUrl = await app.getUrl();
     prisma = app.get(PrismaService);
     agent = request.agent(app.getHttpServer());
     guestAgent = request.agent(app.getHttpServer());
@@ -43,6 +51,20 @@ describe('AppController (e2e)', () => {
       statusCode: 200,
       data: 'Hello World!',
     });
+  });
+
+  it('인증 정보가 없는 WebSocket 연결을 거절한다', async () => {
+    const socket = createRoomSocket(serverUrl);
+    const error = await waitForSocketEvent<Error & { data?: unknown }>(
+      socket,
+      'connect_error',
+    );
+
+    expect(error.data).toEqual({
+      code: 'AUTH_ACTOR_REQUIRED',
+      message: '회원 Access Token 또는 비회원 Guest Token이 필요합니다.',
+    });
+    socket.disconnect();
   });
 
   it('POST /api/v1/guest-sessions 요청으로 비회원 세션을 발급한다', async () => {
@@ -66,7 +88,8 @@ describe('AppController (e2e)', () => {
     expect(setCookie[0]).toContain('Path=/api/v1');
     expect(setCookie[0]).toContain('Max-Age=86400');
 
-    const guestToken = setCookie[0].split(';')[0].split('=')[1];
+    guestCookie = setCookie[0].split(';')[0];
+    const guestToken = guestCookie.split('=')[1];
     guestTokenHash = createHash('sha256').update(guestToken).digest('hex');
     const savedSession = await prisma.guestSession.findUnique({
       where: {
@@ -125,16 +148,61 @@ describe('AppController (e2e)', () => {
     createdRoomIds.push(response.body.data.id as string);
   });
 
+  it('비회원 WebSocket으로 참가 중인 방을 구독하고 현재 상태를 받는다', async () => {
+    hostSocket = createRoomSocket(serverUrl, { cookie: guestCookie });
+    await waitForSocketEvent(hostSocket, 'connect');
+
+    const errorPromise = waitForSocketEvent<{
+      code: string;
+      message: string;
+    }>(hostSocket, 'realtime:error');
+    hostSocket.emit('room:subscribe', { code: 'wrong' });
+    await expect(errorPromise).resolves.toEqual({
+      code: 'REALTIME_INVALID_SUBSCRIBE_PAYLOAD',
+      message: '올바른 6자리 방 코드가 필요합니다.',
+    });
+
+    const statePromise = waitForSocketEvent<{
+      code: string;
+      playerCount: number;
+    }>(hostSocket, 'room:state');
+    hostSocket.emit('room:subscribe', { code: publicRoomCode.toLowerCase() });
+
+    await expect(statePromise).resolves.toMatchObject({
+      code: publicRoomCode,
+      playerCount: 1,
+    });
+  });
+
   it('방에 참가할 비회원 세션을 발급한다', async () => {
     const response = await joiningGuestAgent
       .post('/api/v1/guest-sessions')
       .expect(201);
     const setCookie = response.headers['set-cookie'] as string[];
-    const guestToken = setCookie[0].split(';')[0].split('=')[1];
+    joiningGuestCookie = setCookie[0].split(';')[0];
+    const guestToken = joiningGuestCookie.split('=')[1];
 
     joiningGuestTokenHash = createHash('sha256')
       .update(guestToken)
       .digest('hex');
+  });
+
+  it('참가하지 않은 비회원의 방 WebSocket 구독을 거절한다', async () => {
+    joiningGuestSocket = createRoomSocket(serverUrl, {
+      cookie: joiningGuestCookie,
+    });
+    await waitForSocketEvent(joiningGuestSocket, 'connect');
+
+    const errorPromise = waitForSocketEvent<{
+      code: string;
+      message: string;
+    }>(joiningGuestSocket, 'realtime:error');
+    joiningGuestSocket.emit('room:subscribe', { code: publicRoomCode });
+
+    await expect(errorPromise).resolves.toEqual({
+      code: 'ROOM_PARTICIPANT_NOT_FOUND',
+      message: '해당 방에 참가하고 있지 않습니다.',
+    });
   });
 
   it('비회원이 닉네임 없이 방에 참가하면 400 오류를 반환한다', () => {
@@ -153,6 +221,11 @@ describe('AppController (e2e)', () => {
   });
 
   it('비회원이 초대 코드와 닉네임으로 방에 참가한다', async () => {
+    const joinedEventPromise = waitForSocketEvent<{
+      roomCode: string;
+      participant: { nickname: string };
+      playerCount: number;
+    }>(hostSocket, 'room:participant-joined');
     const response = await joiningGuestAgent
       .post(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/participants`)
       .send({ nickname: ' 참가자123 ' })
@@ -179,6 +252,23 @@ describe('AppController (e2e)', () => {
           isHost: false,
         },
       },
+    });
+    await expect(joinedEventPromise).resolves.toMatchObject({
+      roomCode: publicRoomCode,
+      participant: {
+        nickname: '참가자123',
+      },
+      playerCount: 2,
+    });
+
+    const statePromise = waitForSocketEvent<{
+      code: string;
+      playerCount: number;
+    }>(joiningGuestSocket, 'room:state');
+    joiningGuestSocket.emit('room:subscribe', { code: publicRoomCode });
+    await expect(statePromise).resolves.toMatchObject({
+      code: publicRoomCode,
+      playerCount: 2,
     });
   });
 
@@ -302,6 +392,22 @@ describe('AppController (e2e)', () => {
     createdRoomIds.push(response.body.data.id as string);
   });
 
+  it('회원 Access Token으로 WebSocket에 연결하고 방을 구독한다', async () => {
+    memberSocket = createRoomSocket(serverUrl, { accessToken });
+    await waitForSocketEvent(memberSocket, 'connect');
+
+    const statePromise = waitForSocketEvent<{
+      code: string;
+      playerCount: number;
+    }>(memberSocket, 'room:state');
+    memberSocket.emit('room:subscribe', { code: privateRoomCode });
+
+    await expect(statePromise).resolves.toMatchObject({
+      code: privateRoomCode,
+      playerCount: 1,
+    });
+  });
+
   it('이미 방에 참가 중인 회원이 방을 생성하면 409 오류를 반환한다', () => {
     return request(app.getHttpServer())
       .post('/api/v1/rooms')
@@ -393,6 +499,10 @@ describe('AppController (e2e)', () => {
   });
 
   it('일반 참가자가 준비 상태를 변경한다', async () => {
+    const readyEventPromise = waitForSocketEvent<{
+      roomCode: string;
+      participant: { nickname: string; isReady: boolean };
+    }>(hostSocket, 'room:ready-changed');
     await joiningGuestAgent
       .patch(`/api/v1/rooms/${publicRoomCode}/participants/me/ready`)
       .send({ isReady: true })
@@ -408,6 +518,13 @@ describe('AppController (e2e)', () => {
           },
         });
       });
+    await expect(readyEventPromise).resolves.toMatchObject({
+      roomCode: publicRoomCode,
+      participant: {
+        nickname: '참가자123',
+        isReady: true,
+      },
+    });
 
     await joiningGuestAgent
       .patch(`/api/v1/rooms/${publicRoomCode}/participants/me/ready`)
@@ -489,6 +606,10 @@ describe('AppController (e2e)', () => {
       .send({ isReady: true })
       .expect(200);
 
+    const gameStartedPromise = waitForSocketEvent<{
+      roomCode: string;
+      room: { status: string };
+    }>(joiningGuestSocket, 'room:game-started');
     await guestAgent
       .post(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/start`)
       .expect(201)
@@ -503,6 +624,12 @@ describe('AppController (e2e)', () => {
           },
         });
       });
+    await expect(gameStartedPromise).resolves.toMatchObject({
+      roomCode: publicRoomCode,
+      room: {
+        status: 'PLAYING',
+      },
+    });
   });
 
   it('이미 시작된 방은 다시 시작할 수 없다', () => {
@@ -520,6 +647,13 @@ describe('AppController (e2e)', () => {
   });
 
   it('방장이 나가면 남은 참가자에게 방장을 넘긴다', async () => {
+    const leftEventPromise = waitForSocketEvent<{
+      participantId: string;
+      playerCount: number;
+    }>(joiningGuestSocket, 'room:participant-left');
+    const hostChangedPromise = waitForSocketEvent<{
+      host: { nickname: string };
+    }>(joiningGuestSocket, 'room:host-changed');
     await guestAgent
       .delete(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/participants/me`)
       .expect(200)
@@ -528,6 +662,15 @@ describe('AppController (e2e)', () => {
         statusCode: 200,
         data: null,
       });
+
+    await expect(leftEventPromise).resolves.toMatchObject({
+      playerCount: 1,
+    });
+    await expect(hostChangedPromise).resolves.toMatchObject({
+      host: {
+        nickname: '참가자123',
+      },
+    });
 
     const response = await request(app.getHttpServer())
       .get(`/api/v1/rooms/${publicRoomCode}`)
@@ -694,6 +837,9 @@ describe('AppController (e2e)', () => {
   });
 
   afterAll(async () => {
+    hostSocket?.disconnect();
+    joiningGuestSocket?.disconnect();
+    memberSocket?.disconnect();
     await prisma.room.deleteMany({
       where: {
         id: {
@@ -720,3 +866,46 @@ describe('AppController (e2e)', () => {
     await app.close();
   });
 });
+
+function createRoomSocket(
+  serverUrl: string,
+  options: {
+    accessToken?: string;
+    cookie?: string;
+  } = {},
+): Socket {
+  return io(`${serverUrl}/rooms`, {
+    path: '/api/v1/socket.io',
+    transports: ['websocket'],
+    autoConnect: false,
+    forceNew: true,
+    reconnection: false,
+    auth: options.accessToken
+      ? { accessToken: options.accessToken }
+      : undefined,
+    extraHeaders: options.cookie ? { Cookie: options.cookie } : undefined,
+  });
+}
+
+function waitForSocketEvent<T = unknown>(
+  socket: Socket,
+  event: string,
+  timeoutMs = 5000,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off(event, handleEvent);
+      reject(new Error(`${event} 이벤트를 기다리는 중 시간 초과되었습니다.`));
+    }, timeoutMs);
+    const handleEvent = (data: T) => {
+      clearTimeout(timeout);
+      resolve(data);
+    };
+
+    socket.once(event, handleEvent);
+
+    if (!socket.connected && !socket.active) {
+      socket.connect();
+    }
+  });
+}
