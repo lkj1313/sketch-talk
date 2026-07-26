@@ -16,6 +16,16 @@ export const ROOM_ERROR = {
     code: 'ROOM_PARTICIPANT_NOT_FOUND',
     message: '해당 방에 참가하고 있지 않습니다.',
   },
+  HOST_READY_NOT_ALLOWED: {
+    statusCode: HttpStatus.FORBIDDEN,
+    code: 'ROOM_HOST_READY_NOT_ALLOWED',
+    message: '방장은 준비 상태를 변경할 수 없습니다.',
+  },
+  READY_NOT_CHANGEABLE: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ROOM_READY_NOT_CHANGEABLE',
+    message: '대기 중인 방에서만 준비 상태를 변경할 수 있습니다.',
+  },
   FULL: {
     statusCode: HttpStatus.CONFLICT,
     code: 'ROOM_FULL',

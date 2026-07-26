@@ -392,6 +392,54 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('일반 참가자가 준비 상태를 변경한다', async () => {
+    await joiningGuestAgent
+      .patch(`/api/v1/rooms/${publicRoomCode}/participants/me/ready`)
+      .send({ isReady: true })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          success: true,
+          statusCode: 200,
+          data: {
+            nickname: '참가자123',
+            isReady: true,
+            isHost: false,
+          },
+        });
+      });
+
+    await joiningGuestAgent
+      .patch(`/api/v1/rooms/${publicRoomCode}/participants/me/ready`)
+      .send({ isReady: false })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.data.isReady).toBe(false);
+      });
+  });
+
+  it('방장은 준비 상태를 변경할 수 없다', () => {
+    return guestAgent
+      .patch(`/api/v1/rooms/${publicRoomCode}/participants/me/ready`)
+      .send({ isReady: true })
+      .expect(403)
+      .expect({
+        success: false,
+        statusCode: 403,
+        error: {
+          code: 'ROOM_HOST_READY_NOT_ALLOWED',
+          message: '방장은 준비 상태를 변경할 수 없습니다.',
+        },
+      });
+  });
+
+  it('준비 상태가 boolean이 아니면 400 오류를 반환한다', () => {
+    return joiningGuestAgent
+      .patch(`/api/v1/rooms/${publicRoomCode}/participants/me/ready`)
+      .send({ isReady: 'true' })
+      .expect(400);
+  });
+
   it('방장이 나가면 남은 참가자에게 방장을 넘긴다', async () => {
     await guestAgent
       .delete(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/participants/me`)

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -17,8 +18,12 @@ import { GetRoomsQueryDto } from '@/rooms/dto/get-rooms-query.dto';
 import { JoinRoomDto } from '@/rooms/dto/join-room.dto';
 import { JoinRoomResponseDto } from '@/rooms/dto/join-room-response.dto';
 import { RoomCodeParamDto } from '@/rooms/dto/room-code-param.dto';
-import { RoomDetailResponseDto } from '@/rooms/dto/room-detail-response.dto';
+import {
+  RoomDetailResponseDto,
+  RoomParticipantResponseDto,
+} from '@/rooms/dto/room-detail-response.dto';
 import { RoomResponseDto } from '@/rooms/dto/room-response.dto';
+import { UpdateReadyDto } from '@/rooms/dto/update-ready.dto';
 import { RoomsService } from '@/rooms/rooms.service';
 
 @Controller('rooms')
@@ -41,6 +46,22 @@ export class RoomsController {
     const room = await this.roomsService.findByCode(params.code);
 
     return { data: room };
+  }
+
+  @UseGuards(ActorGuard)
+  @Patch(':code/participants/me/ready')
+  async updateReady(
+    @CurrentActor() actor: RequestActor,
+    @Param() params: RoomCodeParamDto,
+    @Body() dto: UpdateReadyDto,
+  ): Promise<ControllerResponse<RoomParticipantResponseDto>> {
+    const participant = await this.roomsService.updateReady(
+      actor,
+      params.code,
+      dto,
+    );
+
+    return { data: participant };
   }
 
   @UseGuards(ActorGuard)

@@ -9,6 +9,7 @@ describe('RoomsService', () => {
   const roomParticipantFindFirst = jest.fn();
   const roomParticipantCreate = jest.fn();
   const roomParticipantDelete = jest.fn();
+  const roomParticipantUpdate = jest.fn();
   const roomCreate = jest.fn();
   const roomDelete = jest.fn();
   const roomUpdate = jest.fn();
@@ -22,6 +23,7 @@ describe('RoomsService', () => {
       findFirst: roomParticipantFindFirst,
       create: roomParticipantCreate,
       delete: roomParticipantDelete,
+      update: roomParticipantUpdate,
     },
     room: {
       create: roomCreate,
@@ -430,6 +432,118 @@ describe('RoomsService', () => {
     });
   });
 
+  it('일반 참가자가 준비 상태를 변경한다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'participant-id',
+      nickname: '참가자',
+      score: 0,
+      isReady: false,
+      room: {
+        status: RoomStatus.WAITING,
+        hostParticipantId: 'host-participant-id',
+      },
+    });
+    roomParticipantUpdate.mockResolvedValue({
+      id: 'participant-id',
+      nickname: '참가자',
+      score: 0,
+      isReady: true,
+    });
+
+    await expect(
+      roomsService.updateReady(
+        { type: 'GUEST', guestSessionId: 'guest-session-id' },
+        'ABC234',
+        { isReady: true },
+      ),
+    ).resolves.toEqual({
+      id: 'participant-id',
+      nickname: '참가자',
+      score: 0,
+      isReady: true,
+      isHost: false,
+    });
+    expect(roomParticipantUpdate).toHaveBeenCalledWith({
+      where: { id: 'participant-id' },
+      data: { isReady: true },
+      select: {
+        id: true,
+        nickname: true,
+        score: true,
+        isReady: true,
+      },
+    });
+  });
+
+  it('방장은 준비 상태를 변경할 수 없다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'host-participant-id',
+      nickname: '방장',
+      score: 0,
+      isReady: false,
+      room: {
+        status: RoomStatus.WAITING,
+        hostParticipantId: 'host-participant-id',
+      },
+    });
+
+    const error = await getUpdateReadyError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+      true,
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.FORBIDDEN);
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_HOST_READY_NOT_ALLOWED',
+      message: '방장은 준비 상태를 변경할 수 없습니다.',
+    });
+  });
+
+  it('대기 상태가 아닌 방에서는 준비 상태를 변경할 수 없다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'participant-id',
+      nickname: '참가자',
+      score: 0,
+      isReady: false,
+      room: {
+        status: RoomStatus.PLAYING,
+        hostParticipantId: 'host-participant-id',
+      },
+    });
+
+    const error = await getUpdateReadyError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+      true,
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.CONFLICT);
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_READY_NOT_CHANGEABLE',
+      message: '대기 중인 방에서만 준비 상태를 변경할 수 있습니다.',
+    });
+  });
+
+  it('참가하지 않은 사용자는 준비 상태를 변경할 수 없다', async () => {
+    roomParticipantFindFirst.mockResolvedValue(null);
+
+    const error = await getUpdateReadyError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+      true,
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.NOT_FOUND);
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_PARTICIPANT_NOT_FOUND',
+      message: '해당 방에 참가하고 있지 않습니다.',
+    });
+  });
+
   it('일반 참가자가 방을 나가면 참가자 정보만 삭제한다', async () => {
     roomParticipantFindFirst.mockResolvedValue({
       id: 'participant-id',
@@ -567,6 +681,25 @@ async function getLeaveRoomError(
 ): Promise<AppException> {
   try {
     await roomsService.leave(actor, code);
+  } catch (error) {
+    if (error instanceof AppException) {
+      return error;
+    }
+  }
+
+  throw new Error('AppException이 발생하지 않았습니다.');
+}
+
+async function getUpdateReadyError(
+  roomsService: RoomsService,
+  actor:
+    | { type: 'USER'; userId: string }
+    | { type: 'GUEST'; guestSessionId: string },
+  code: string,
+  isReady: boolean,
+): Promise<AppException> {
+  try {
+    await roomsService.updateReady(actor, code, { isReady });
   } catch (error) {
     if (error instanceof AppException) {
       return error;

@@ -16,6 +16,10 @@ export interface JoinRoomRequest {
   nickname?: string;
 }
 
+export interface UpdateReadyRequest {
+  isReady: boolean;
+}
+
 export interface RoomHostResponse {
   id: string;
   nickname: string;
