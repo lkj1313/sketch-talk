@@ -13,6 +13,15 @@ export interface LoginResult {
   user: AuthUser;
 }
 
+export interface RefreshResult {
+  accessToken: string;
+}
+
+export interface AuthResultWithRefreshToken<T> {
+  result: T;
+  refreshToken: string;
+}
+
 export interface AccessTokenPayload {
   sub: string;
 }

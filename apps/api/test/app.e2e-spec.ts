@@ -10,6 +10,8 @@ describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let accessToken: string;
+  let loginRefreshCookie: string;
+  let agent: ReturnType<typeof request.agent>;
   const signupEmail = `e2e-${Date.now()}@example.com`;
   const signupNickname = `e2e-${Date.now()}`;
 
@@ -22,6 +24,7 @@ describe('AppController (e2e)', () => {
     configureApp(app);
     await app.init();
     prisma = app.get(PrismaService);
+    agent = request.agent(app.getHttpServer());
   });
 
   it('GET /api/v1 요청에 공통 성공 응답을 반환한다', () => {
@@ -74,7 +77,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('POST /api/v1/auth/login 요청으로 로그인한다', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await agent
       .post('/api/v1/auth/login')
       .send({
         email: signupEmail.toUpperCase(),
@@ -94,8 +97,43 @@ describe('AppController (e2e)', () => {
       },
     });
     expect(response.body.data.accessToken).toEqual(expect.any(String));
+    expect(response.body.data).not.toHaveProperty('refreshToken');
     expect(response.body.data.user).not.toHaveProperty('passwordHash');
+    const setCookie = response.headers['set-cookie'] as string[];
+    expect(setCookie[0]).toContain('HttpOnly');
+    expect(setCookie[0]).toContain('SameSite=Lax');
+    expect(setCookie[0]).toContain('Path=/api/v1/auth');
+    loginRefreshCookie = setCookie[0].split(';')[0];
     accessToken = response.body.data.accessToken as string;
+  });
+
+  it('POST /api/v1/auth/refresh 요청으로 토큰을 재발급한다', async () => {
+    const response = await agent.post('/api/v1/auth/refresh').expect(200);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 200,
+      data: {
+        accessToken: expect.any(String),
+      },
+    });
+    expect(response.body.data).not.toHaveProperty('refreshToken');
+    accessToken = response.body.data.accessToken as string;
+  });
+
+  it('회전으로 폐기된 Refresh Token은 다시 사용할 수 없다', () => {
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', loginRefreshCookie)
+      .expect(401)
+      .expect({
+        success: false,
+        statusCode: 401,
+        error: {
+          code: 'AUTH_INVALID_REFRESH_TOKEN',
+          message: '유효하지 않거나 만료된 Refresh Token입니다.',
+        },
+      });
   });
 
   it('잘못된 비밀번호로 로그인하면 401 오류를 반환한다', () => {
@@ -160,6 +198,26 @@ describe('AppController (e2e)', () => {
         error: {
           code: 'AUTH_INVALID_ACCESS_TOKEN',
           message: '유효하지 않거나 만료된 Access Token입니다.',
+        },
+      });
+  });
+
+  it('POST /api/v1/auth/logout 요청으로 세션과 쿠키를 폐기한다', async () => {
+    await agent.post('/api/v1/auth/logout').expect(200).expect({
+      success: true,
+      statusCode: 200,
+      data: null,
+    });
+
+    await agent
+      .post('/api/v1/auth/refresh')
+      .expect(401)
+      .expect({
+        success: false,
+        statusCode: 401,
+        error: {
+          code: 'AUTH_REFRESH_TOKEN_REQUIRED',
+          message: 'Refresh Token이 필요합니다.',
         },
       });
   });
