@@ -9,15 +9,16 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(uuid()) @db.Uuid
-  email        String        @unique @db.VarChar(320)
-  passwordHash String        @db.VarChar(255)
-  nickname     String        @unique @db.VarChar(30)
-  avatarUrl    String?
-  lastLoginAt  DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  authSessions AuthSession[]
+  id              String           @id @default(uuid()) @db.Uuid
+  email           String           @unique @db.VarChar(320)
+  passwordHash    String           @db.VarChar(255)
+  nickname        String           @unique @db.VarChar(30)
+  avatarUrl       String?
+  lastLoginAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  authSessions    AuthSession[]
+  roomParticipant RoomParticipant?
 }
 
 model AuthSession {
@@ -30,4 +31,61 @@ model AuthSession {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum RoomStatus {
+  WAITING
+  PLAYING
+  FINISHED
+  CLOSED
+}
+
+enum RoomVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model Room {
+  id                String            @id @default(uuid()) @db.Uuid
+  code              String            @unique @db.VarChar(8)
+  title             String            @db.VarChar(50)
+  status            RoomStatus        @default(WAITING)
+  visibility        RoomVisibility    @default(PUBLIC)
+  maxPlayers        Int               @default(8) @db.SmallInt
+  allowMidJoin      Boolean           @default(true)
+  hostParticipantId String?           @unique @db.Uuid
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  startedAt         DateTime?
+  endedAt           DateTime?
+  hostParticipant   RoomParticipant?  @relation("RoomHost", fields: [hostParticipantId], references: [id], onDelete: SetNull)
+  participants      RoomParticipant[] @relation("RoomParticipants")
+
+  @@index([visibility, status, createdAt])
+}
+
+model RoomParticipant {
+  id             String        @id @default(uuid()) @db.Uuid
+  roomId         String        @db.Uuid
+  userId         String?       @unique @db.Uuid
+  guestSessionId String?       @unique @db.Uuid
+  nickname       String        @db.VarChar(30)
+  score          Int           @default(0)
+  isReady        Boolean       @default(false)
+  joinedAt       DateTime      @default(now())
+  room           Room          @relation("RoomParticipants", fields: [roomId], references: [id], onDelete: Cascade)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guestSession   GuestSession? @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
+  hostedRoom     Room?         @relation("RoomHost")
+
+  @@index([roomId])
+}
+
+model GuestSession {
+  id          String           @id @default(uuid()) @db.Uuid
+  tokenHash   String           @unique @db.VarChar(64)
+  expiresAt   DateTime
+  createdAt   DateTime         @default(now())
+  lastSeenAt  DateTime         @default(now())
+  participant RoomParticipant?
 }
