@@ -12,6 +12,10 @@ export interface CreateRoomRequest {
   nickname?: string;
 }
 
+export interface JoinRoomRequest {
+  nickname?: string;
+}
+
 export interface RoomHostResponse {
   id: string;
   nickname: string;
@@ -46,4 +50,9 @@ export interface RoomParticipantResponse {
 
 export interface RoomDetailResponse extends RoomResponse {
   participants: RoomParticipantResponse[];
+}
+
+export interface JoinRoomResponse {
+  room: RoomDetailResponse;
+  participant: RoomParticipantResponse;
 }

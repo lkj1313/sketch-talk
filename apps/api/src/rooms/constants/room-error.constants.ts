@@ -11,6 +11,26 @@ export const ROOM_ERROR = {
     code: 'ROOM_ALREADY_IN_ROOM',
     message: '이미 다른 방에 참가 중입니다.',
   },
+  FULL: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ROOM_FULL',
+    message: '방의 정원이 가득 찼습니다.',
+  },
+  NOT_JOINABLE: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ROOM_NOT_JOINABLE',
+    message: '참가할 수 없는 상태의 방입니다.',
+  },
+  MID_JOIN_NOT_ALLOWED: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ROOM_MID_JOIN_NOT_ALLOWED',
+    message: '게임이 시작된 후에는 참가할 수 없는 방입니다.',
+  },
+  NICKNAME_DUPLICATED: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'ROOM_NICKNAME_DUPLICATED',
+    message: '방에서 이미 사용 중인 닉네임입니다.',
+  },
   GUEST_NICKNAME_REQUIRED: {
     statusCode: HttpStatus.BAD_REQUEST,
     code: 'ROOM_GUEST_NICKNAME_REQUIRED',

@@ -13,6 +13,8 @@ import type { RequestActor } from '@/auth/types/request-actor.type';
 import type { ControllerResponse } from '@/common/types/api-response.type';
 import { CreateRoomDto } from '@/rooms/dto/create-room.dto';
 import { GetRoomsQueryDto } from '@/rooms/dto/get-rooms-query.dto';
+import { JoinRoomDto } from '@/rooms/dto/join-room.dto';
+import { JoinRoomResponseDto } from '@/rooms/dto/join-room-response.dto';
 import { RoomCodeParamDto } from '@/rooms/dto/room-code-param.dto';
 import { RoomDetailResponseDto } from '@/rooms/dto/room-detail-response.dto';
 import { RoomResponseDto } from '@/rooms/dto/room-response.dto';
@@ -38,6 +40,18 @@ export class RoomsController {
     const room = await this.roomsService.findByCode(params.code);
 
     return { data: room };
+  }
+
+  @UseGuards(ActorGuard)
+  @Post(':code/participants')
+  async join(
+    @CurrentActor() actor: RequestActor,
+    @Param() params: RoomCodeParamDto,
+    @Body() dto: JoinRoomDto,
+  ): Promise<ControllerResponse<JoinRoomResponseDto>> {
+    const result = await this.roomsService.join(actor, params.code, dto);
+
+    return { data: result };
   }
 
   @UseGuards(ActorGuard)
