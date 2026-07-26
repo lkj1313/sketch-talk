@@ -15,6 +15,8 @@ describe('AppController (e2e)', () => {
   let guestTokenHash: string | undefined;
   let agent: ReturnType<typeof request.agent>;
   let guestAgent: ReturnType<typeof request.agent>;
+  let publicRoomCode: string;
+  let privateRoomCode: string;
   const createdRoomIds: string[] = [];
   const signupEmail = `e2e-${Date.now()}@example.com`;
   const signupNickname = `e2e-${Date.now()}`;
@@ -116,6 +118,7 @@ describe('AppController (e2e)', () => {
         },
       },
     });
+    publicRoomCode = response.body.data.code as string;
     createdRoomIds.push(response.body.data.id as string);
   });
 
@@ -220,6 +223,7 @@ describe('AppController (e2e)', () => {
         },
       },
     });
+    privateRoomCode = response.body.data.code as string;
     createdRoomIds.push(response.body.data.id as string);
   });
 
@@ -237,6 +241,78 @@ describe('AppController (e2e)', () => {
         error: {
           code: 'ROOM_ALREADY_IN_ROOM',
           message: '이미 다른 방에 참가 중입니다.',
+        },
+      });
+  });
+
+  it('GET /api/v1/rooms 요청으로 공개 방 목록만 조회한다', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/rooms')
+      .query({ page: 1, pageSize: 20, status: 'WAITING' })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 200,
+      meta: {
+        page: 1,
+        pageSize: 20,
+        hasNext: false,
+      },
+    });
+    expect(response.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: publicRoomCode,
+          visibility: 'PUBLIC',
+          playerCount: 1,
+        }),
+      ]),
+    );
+    expect(
+      response.body.data.some(
+        (room: { code: string }) => room.code === privateRoomCode,
+      ),
+    ).toBe(false);
+  });
+
+  it('GET /api/v1/rooms/:code 요청으로 비공개 방도 상세 조회한다', async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/rooms/${privateRoomCode.toLowerCase()}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 200,
+      data: {
+        code: privateRoomCode,
+        visibility: 'PRIVATE',
+        playerCount: 1,
+        host: {
+          nickname: signupNickname,
+        },
+        participants: [
+          {
+            nickname: signupNickname,
+            score: 0,
+            isReady: false,
+            isHost: true,
+          },
+        ],
+      },
+    });
+  });
+
+  it('존재하지 않는 방 코드를 조회하면 404 오류를 반환한다', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/rooms/ZZZZZZ')
+      .expect(404)
+      .expect({
+        success: false,
+        statusCode: 404,
+        error: {
+          code: 'ROOM_NOT_FOUND',
+          message: '방을 찾을 수 없습니다.',
         },
       });
   });
