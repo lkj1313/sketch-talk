@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AUTH_ERROR } from '@/auth/constants/auth-error.constants';
 import type { RequestActor } from '@/auth/types/request-actor.type';
 import { AppException } from '@/common/exceptions/app.exception';
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma, RoomStatus } from '@/generated/prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ROOM_CODE_GENERATION_MAX_ATTEMPTS } from '@/rooms/constants/room.constants';
 import { ROOM_ERROR } from '@/rooms/constants/room-error.constants';
@@ -10,8 +10,12 @@ import { CreateRoomDto } from '@/rooms/dto/create-room.dto';
 import { GetRoomsQueryDto } from '@/rooms/dto/get-rooms-query.dto';
 import { JoinRoomDto } from '@/rooms/dto/join-room.dto';
 import { JoinRoomResponseDto } from '@/rooms/dto/join-room-response.dto';
-import { RoomDetailResponseDto } from '@/rooms/dto/room-detail-response.dto';
+import {
+  RoomDetailResponseDto,
+  RoomParticipantResponseDto,
+} from '@/rooms/dto/room-detail-response.dto';
 import { RoomResponseDto } from '@/rooms/dto/room-response.dto';
+import { UpdateReadyDto } from '@/rooms/dto/update-ready.dto';
 import { createRoomCode } from '@/rooms/utils/room-code.util';
 
 @Injectable()
@@ -268,6 +272,61 @@ export class RoomsService {
         where: { id: participant.id },
       });
     });
+  }
+
+  async updateReady(
+    actor: RequestActor,
+    code: string,
+    dto: UpdateReadyDto,
+  ): Promise<RoomParticipantResponseDto> {
+    const participant = await this.prisma.roomParticipant.findFirst({
+      where: {
+        room: { code },
+        ...(actor.type === 'USER'
+          ? { userId: actor.userId }
+          : { guestSessionId: actor.guestSessionId }),
+      },
+      select: {
+        id: true,
+        nickname: true,
+        score: true,
+        isReady: true,
+        room: {
+          select: {
+            status: true,
+            hostParticipantId: true,
+          },
+        },
+      },
+    });
+
+    if (!participant) {
+      throw new AppException(ROOM_ERROR.PARTICIPANT_NOT_FOUND);
+    }
+
+    if (participant.id === participant.room.hostParticipantId) {
+      throw new AppException(ROOM_ERROR.HOST_READY_NOT_ALLOWED);
+    }
+
+    if (participant.room.status !== RoomStatus.WAITING) {
+      throw new AppException(ROOM_ERROR.READY_NOT_CHANGEABLE);
+    }
+
+    const updatedParticipant = await this.prisma.roomParticipant.update({
+      where: { id: participant.id },
+      data: { isReady: dto.isReady },
+      select: {
+        id: true,
+        nickname: true,
+        score: true,
+        isReady: true,
+      },
+    });
+
+    return new RoomParticipantResponseDto(
+      updatedParticipant,
+      participant.room.hostParticipantId,
+    );
   }
 
   private async createRoomTransaction(

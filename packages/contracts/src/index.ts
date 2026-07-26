@@ -25,4 +25,5 @@ export type {
   RoomResponse,
   RoomStatus,
   RoomVisibility,
+  UpdateReadyRequest,
 } from "./room.js";
