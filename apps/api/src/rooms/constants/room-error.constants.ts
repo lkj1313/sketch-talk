@@ -11,6 +11,11 @@ export const ROOM_ERROR = {
     code: 'ROOM_ALREADY_IN_ROOM',
     message: '이미 다른 방에 참가 중입니다.',
   },
+  PARTICIPANT_NOT_FOUND: {
+    statusCode: HttpStatus.NOT_FOUND,
+    code: 'ROOM_PARTICIPANT_NOT_FOUND',
+    message: '해당 방에 참가하고 있지 않습니다.',
+  },
   FULL: {
     statusCode: HttpStatus.CONFLICT,
     code: 'ROOM_FULL',
