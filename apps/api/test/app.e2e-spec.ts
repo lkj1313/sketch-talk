@@ -14,6 +14,8 @@ describe('AppController (e2e)', () => {
   let loginRefreshCookie: string;
   let guestTokenHash: string | undefined;
   let agent: ReturnType<typeof request.agent>;
+  let guestAgent: ReturnType<typeof request.agent>;
+  const createdRoomIds: string[] = [];
   const signupEmail = `e2e-${Date.now()}@example.com`;
   const signupNickname = `e2e-${Date.now()}`;
 
@@ -27,6 +29,7 @@ describe('AppController (e2e)', () => {
     await app.init();
     prisma = app.get(PrismaService);
     agent = request.agent(app.getHttpServer());
+    guestAgent = request.agent(app.getHttpServer());
   });
 
   it('GET /api/v1 요청에 공통 성공 응답을 반환한다', () => {
@@ -38,7 +41,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('POST /api/v1/guest-sessions 요청으로 비회원 세션을 발급한다', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await guestAgent
       .post('/api/v1/guest-sessions')
       .expect(201);
 
@@ -68,6 +71,52 @@ describe('AppController (e2e)', () => {
 
     expect(savedSession).not.toBeNull();
     expect(savedSession?.tokenHash).not.toBe(guestToken);
+  });
+
+  it('비회원이 닉네임 없이 방을 생성하면 400 오류를 반환한다', () => {
+    return guestAgent
+      .post('/api/v1/rooms')
+      .send({
+        title: '게스트 방',
+      })
+      .expect(400)
+      .expect({
+        success: false,
+        statusCode: 400,
+        error: {
+          code: 'ROOM_GUEST_NICKNAME_REQUIRED',
+          message: '비회원은 닉네임이 필요합니다.',
+        },
+      });
+  });
+
+  it('비회원이 POST /api/v1/rooms 요청으로 방을 생성한다', async () => {
+    const response = await guestAgent
+      .post('/api/v1/rooms')
+      .send({
+        title: ' 게스트 방 ',
+        nickname: ' 게스트123 ',
+        maxPlayers: 6,
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 201,
+      data: {
+        code: expect.stringMatching(/^[A-HJ-NP-Z2-9]{6}$/),
+        title: '게스트 방',
+        status: 'WAITING',
+        visibility: 'PUBLIC',
+        maxPlayers: 6,
+        allowMidJoin: true,
+        playerCount: 1,
+        host: {
+          nickname: '게스트123',
+        },
+      },
+    });
+    createdRoomIds.push(response.body.data.id as string);
   });
 
   it('POST /api/v1/auth/signup 요청으로 회원을 생성한다', async () => {
@@ -140,6 +189,56 @@ describe('AppController (e2e)', () => {
     expect(setCookie[0]).toContain('Path=/api/v1/auth');
     loginRefreshCookie = setCookie[0].split(';')[0];
     accessToken = response.body.data.accessToken as string;
+  });
+
+  it('회원이 POST /api/v1/rooms 요청으로 방을 생성한다', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/rooms')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        title: ' 회원 방 ',
+        nickname: '사용되지 않는 닉네임',
+        visibility: 'PRIVATE',
+        maxPlayers: 10,
+        allowMidJoin: false,
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 201,
+      data: {
+        code: expect.stringMatching(/^[A-HJ-NP-Z2-9]{6}$/),
+        title: '회원 방',
+        status: 'WAITING',
+        visibility: 'PRIVATE',
+        maxPlayers: 10,
+        allowMidJoin: false,
+        playerCount: 1,
+        host: {
+          nickname: signupNickname,
+        },
+      },
+    });
+    createdRoomIds.push(response.body.data.id as string);
+  });
+
+  it('이미 방에 참가 중인 회원이 방을 생성하면 409 오류를 반환한다', () => {
+    return request(app.getHttpServer())
+      .post('/api/v1/rooms')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        title: '중복 방',
+      })
+      .expect(409)
+      .expect({
+        success: false,
+        statusCode: 409,
+        error: {
+          code: 'ROOM_ALREADY_IN_ROOM',
+          message: '이미 다른 방에 참가 중입니다.',
+        },
+      });
   });
 
   it('POST /api/v1/auth/refresh 요청으로 토큰을 재발급한다', async () => {
@@ -258,6 +357,13 @@ describe('AppController (e2e)', () => {
   });
 
   afterAll(async () => {
+    await prisma.room.deleteMany({
+      where: {
+        id: {
+          in: createdRoomIds,
+        },
+      },
+    });
     if (guestTokenHash) {
       await prisma.guestSession.deleteMany({
         where: {

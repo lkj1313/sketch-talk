@@ -13,3 +13,10 @@ export type {
   ApiSuccessResponse,
 } from "./api-response.js";
 export type { GuestSessionResponse } from "./guest-session.js";
+export type {
+  CreateRoomRequest,
+  RoomHostResponse,
+  RoomResponse,
+  RoomStatus,
+  RoomVisibility,
+} from "./room.js";
