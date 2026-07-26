@@ -8,7 +8,9 @@ import { RoomsService } from '@/rooms/rooms.service';
 describe('RoomsService', () => {
   const roomParticipantFindFirst = jest.fn();
   const roomParticipantCreate = jest.fn();
+  const roomParticipantDelete = jest.fn();
   const roomCreate = jest.fn();
+  const roomDelete = jest.fn();
   const roomUpdate = jest.fn();
   const roomFindUnique = jest.fn();
   const roomFindMany = jest.fn();
@@ -19,9 +21,11 @@ describe('RoomsService', () => {
     roomParticipant: {
       findFirst: roomParticipantFindFirst,
       create: roomParticipantCreate,
+      delete: roomParticipantDelete,
     },
     room: {
       create: roomCreate,
+      delete: roomDelete,
       update: roomUpdate,
       findUnique: roomFindUnique,
       findMany: roomFindMany,
@@ -425,6 +429,81 @@ describe('RoomsService', () => {
       message: '방에서 이미 사용 중인 닉네임입니다.',
     });
   });
+
+  it('일반 참가자가 방을 나가면 참가자 정보만 삭제한다', async () => {
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'participant-id',
+      roomId: 'room-id',
+      room: { hostParticipantId: 'host-participant-id' },
+    });
+
+    await roomsService.leave({ type: 'USER', userId: 'user-id' }, 'ABC234');
+
+    expect(roomParticipantDelete).toHaveBeenCalledWith({
+      where: { id: 'participant-id' },
+    });
+    expect(roomUpdate).not.toHaveBeenCalled();
+    expect(roomDelete).not.toHaveBeenCalled();
+  });
+
+  it('방장이 나가면 가장 먼저 들어온 참가자에게 방장을 넘긴다', async () => {
+    roomParticipantFindFirst
+      .mockResolvedValueOnce({
+        id: 'host-participant-id',
+        roomId: 'room-id',
+        room: { hostParticipantId: 'host-participant-id' },
+      })
+      .mockResolvedValueOnce({ id: 'next-host-id' });
+
+    await roomsService.leave(
+      { type: 'GUEST', guestSessionId: 'guest-session-id' },
+      'ABC234',
+    );
+
+    expect(roomUpdate).toHaveBeenCalledWith({
+      where: { id: 'room-id' },
+      data: { hostParticipantId: 'next-host-id' },
+    });
+    expect(roomParticipantDelete).toHaveBeenCalledWith({
+      where: { id: 'host-participant-id' },
+    });
+  });
+
+  it('마지막 참가자가 방을 나가면 방을 삭제한다', async () => {
+    roomParticipantFindFirst
+      .mockResolvedValueOnce({
+        id: 'host-participant-id',
+        roomId: 'room-id',
+        room: { hostParticipantId: 'host-participant-id' },
+      })
+      .mockResolvedValueOnce(null);
+
+    await roomsService.leave(
+      { type: 'GUEST', guestSessionId: 'guest-session-id' },
+      'ABC234',
+    );
+
+    expect(roomDelete).toHaveBeenCalledWith({
+      where: { id: 'room-id' },
+    });
+    expect(roomParticipantDelete).not.toHaveBeenCalled();
+  });
+
+  it('참가하지 않은 방에서 나가기를 요청하면 오류를 반환한다', async () => {
+    roomParticipantFindFirst.mockResolvedValue(null);
+
+    const error = await getLeaveRoomError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ABC234',
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.NOT_FOUND);
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_PARTICIPANT_NOT_FOUND',
+      message: '해당 방에 참가하고 있지 않습니다.',
+    });
+  });
 });
 
 async function getCreateRoomError(
@@ -470,6 +549,24 @@ async function getJoinRoomError(
 ): Promise<AppException> {
   try {
     await roomsService.join(actor, code, dto);
+  } catch (error) {
+    if (error instanceof AppException) {
+      return error;
+    }
+  }
+
+  throw new Error('AppException이 발생하지 않았습니다.');
+}
+
+async function getLeaveRoomError(
+  roomsService: RoomsService,
+  actor:
+    | { type: 'USER'; userId: string }
+    | { type: 'GUEST'; guestSessionId: string },
+  code: string,
+): Promise<AppException> {
+  try {
+    await roomsService.leave(actor, code);
   } catch (error) {
     if (error instanceof AppException) {
       return error;

@@ -392,6 +392,65 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it('방장이 나가면 남은 참가자에게 방장을 넘긴다', async () => {
+    await guestAgent
+      .delete(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/participants/me`)
+      .expect(200)
+      .expect({
+        success: true,
+        statusCode: 200,
+        data: null,
+      });
+
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/rooms/${publicRoomCode}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      data: {
+        playerCount: 1,
+        host: {
+          nickname: '참가자123',
+        },
+        participants: [
+          {
+            nickname: '참가자123',
+            isHost: true,
+          },
+        ],
+      },
+    });
+  });
+
+  it('이미 나간 사용자가 다시 나가기를 요청하면 404 오류를 반환한다', () => {
+    return guestAgent
+      .delete(`/api/v1/rooms/${publicRoomCode}/participants/me`)
+      .expect(404)
+      .expect({
+        success: false,
+        statusCode: 404,
+        error: {
+          code: 'ROOM_PARTICIPANT_NOT_FOUND',
+          message: '해당 방에 참가하고 있지 않습니다.',
+        },
+      });
+  });
+
+  it('마지막 참가자가 나가면 방을 삭제한다', async () => {
+    await joiningGuestAgent
+      .delete(`/api/v1/rooms/${publicRoomCode}/participants/me`)
+      .expect(200)
+      .expect({
+        success: true,
+        statusCode: 200,
+        data: null,
+      });
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/rooms/${publicRoomCode}`)
+      .expect(404);
+  });
+
   it('POST /api/v1/auth/refresh 요청으로 토큰을 재발급한다', async () => {
     const response = await agent.post('/api/v1/auth/refresh').expect(200);
 

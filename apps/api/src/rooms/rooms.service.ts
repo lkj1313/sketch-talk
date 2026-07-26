@@ -211,6 +211,65 @@ export class RoomsService {
     }
   }
 
+  async leave(actor: RequestActor, code: string): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      const participant = await transaction.roomParticipant.findFirst({
+        where: {
+          room: { code },
+          ...(actor.type === 'USER'
+            ? { userId: actor.userId }
+            : { guestSessionId: actor.guestSessionId }),
+        },
+        select: {
+          id: true,
+          roomId: true,
+          room: {
+            select: {
+              hostParticipantId: true,
+            },
+          },
+        },
+      });
+
+      if (!participant) {
+        throw new AppException(ROOM_ERROR.PARTICIPANT_NOT_FOUND);
+      }
+
+      if (participant.room.hostParticipantId !== participant.id) {
+        await transaction.roomParticipant.delete({
+          where: { id: participant.id },
+        });
+
+        return;
+      }
+
+      const nextHost = await transaction.roomParticipant.findFirst({
+        where: {
+          roomId: participant.roomId,
+          id: { not: participant.id },
+        },
+        orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
+        select: { id: true },
+      });
+
+      if (!nextHost) {
+        await transaction.room.delete({
+          where: { id: participant.roomId },
+        });
+
+        return;
+      }
+
+      await transaction.room.update({
+        where: { id: participant.roomId },
+        data: { hostParticipantId: nextHost.id },
+      });
+      await transaction.roomParticipant.delete({
+        where: { id: participant.id },
+      });
+    });
+  }
+
   private async createRoomTransaction(
     actor: RequestActor,
     dto: CreateRoomDto,

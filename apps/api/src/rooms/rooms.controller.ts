@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -40,6 +41,17 @@ export class RoomsController {
     const room = await this.roomsService.findByCode(params.code);
 
     return { data: room };
+  }
+
+  @UseGuards(ActorGuard)
+  @Delete(':code/participants/me')
+  async leave(
+    @CurrentActor() actor: RequestActor,
+    @Param() params: RoomCodeParamDto,
+  ): Promise<ControllerResponse<null>> {
+    await this.roomsService.leave(actor, params.code);
+
+    return { data: null };
   }
 
   @UseGuards(ActorGuard)
