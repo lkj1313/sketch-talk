@@ -12,3 +12,4 @@ export type {
   ApiResponse,
   ApiSuccessResponse,
 } from "./api-response.js";
+export type { GuestSessionResponse } from "./guest-session.js";
