@@ -1,4 +1,5 @@
 import { Transform } from 'class-transformer';
+import type { SignupRequest } from '@sketch-talk/contracts';
 import {
   IsByteLength,
   IsEmail,
@@ -11,7 +12,7 @@ import {
   trimString,
 } from '@/common/transformers/string.transformer';
 
-export class SignupDto {
+export class SignupDto implements SignupRequest {
   @Transform(normalizeEmail)
   @IsEmail()
   @MaxLength(320)

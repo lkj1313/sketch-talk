@@ -100,7 +100,7 @@ describe('AuthService', () => {
           email: user.email,
           nickname: user.nickname,
           avatarUrl: user.avatarUrl,
-          createdAt: user.createdAt,
+          createdAt: user.createdAt.toISOString(),
         },
       },
       refreshToken: expect.any(String),
@@ -236,7 +236,10 @@ describe('AuthService', () => {
     };
     userFindUnique.mockResolvedValue(user);
 
-    await expect(authService.getMe(user.id)).resolves.toEqual(user);
+    await expect(authService.getMe(user.id)).resolves.toEqual({
+      ...user,
+      createdAt: user.createdAt.toISOString(),
+    });
   });
 
   it('사용자를 찾을 수 없으면 AUTH_INVALID_ACCESS_TOKEN 오류를 발생시킨다', async () => {

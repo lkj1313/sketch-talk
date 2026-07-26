@@ -19,14 +19,12 @@ import {
 } from '@/auth/constants/auth.constants';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { LoginDto } from '@/auth/dto/login.dto';
+import { AuthUserResponseDto } from '@/auth/dto/response/auth-user-response.dto';
+import { LoginResponseDto } from '@/auth/dto/response/login-response.dto';
+import { RefreshResponseDto } from '@/auth/dto/response/refresh-response.dto';
 import { SignupDto } from '@/auth/dto/signup.dto';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
-import type {
-  AccessTokenPayload,
-  LoginResult,
-  RefreshResult,
-  SignupUser,
-} from '@/auth/types/auth-response.type';
+import type { AccessTokenPayload } from '@/auth/types/auth-response.type';
 import type { ControllerResponse } from '@/common/types/api-response.type';
 
 @Controller('auth')
@@ -39,7 +37,7 @@ export class AuthController {
   @Post('signup')
   async signup(
     @Body() dto: SignupDto,
-  ): Promise<ControllerResponse<SignupUser>> {
+  ): Promise<ControllerResponse<AuthUserResponseDto>> {
     const user = await this.authService.signup(dto);
 
     return { data: user };
@@ -50,7 +48,7 @@ export class AuthController {
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<ControllerResponse<LoginResult>> {
+  ): Promise<ControllerResponse<LoginResponseDto>> {
     const { result, refreshToken } = await this.authService.login(dto);
     response.cookie(
       REFRESH_TOKEN_COOKIE_NAME,
@@ -66,7 +64,7 @@ export class AuthController {
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<ControllerResponse<RefreshResult>> {
+  ): Promise<ControllerResponse<RefreshResponseDto>> {
     const { result, refreshToken } = await this.authService.refresh(
       this.getRefreshTokenCookie(request),
     );
@@ -98,7 +96,7 @@ export class AuthController {
   @Get('me')
   async getMe(
     @CurrentUser() currentUser: AccessTokenPayload,
-  ): Promise<ControllerResponse<SignupUser>> {
+  ): Promise<ControllerResponse<AuthUserResponseDto>> {
     const user = await this.authService.getMe(currentUser.sub);
 
     return { data: user };

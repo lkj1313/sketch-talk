@@ -1,4 +1,5 @@
 import { Transform } from 'class-transformer';
+import type { LoginRequest } from '@sketch-talk/contracts';
 import {
   IsByteLength,
   IsEmail,
@@ -8,7 +9,7 @@ import {
 } from 'class-validator';
 import { normalizeEmail } from '@/common/transformers/string.transformer';
 
-export class LoginDto {
+export class LoginDto implements LoginRequest {
   @Transform(normalizeEmail)
   @IsEmail()
   @MaxLength(320)

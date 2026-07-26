@@ -7,6 +7,9 @@ import {
 } from '@/auth/constants/auth.constants';
 import { AUTH_ERROR } from '@/auth/constants/auth-error.constants';
 import { LoginDto } from '@/auth/dto/login.dto';
+import { AuthUserResponseDto } from '@/auth/dto/response/auth-user-response.dto';
+import { LoginResponseDto } from '@/auth/dto/response/login-response.dto';
+import { RefreshResponseDto } from '@/auth/dto/response/refresh-response.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { SignupDto } from '@/auth/dto/signup.dto';
 import { AppException } from '@/common/exceptions/app.exception';
@@ -14,9 +17,6 @@ import { Prisma } from '@/generated/prisma/client';
 import {
   AuthResultWithRefreshToken,
   AccessTokenPayload,
-  LoginResult,
-  RefreshResult,
-  SignupUser,
 } from '@/auth/types/auth-response.type';
 import {
   createRefreshToken,
@@ -31,11 +31,11 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async signup(dto: SignupDto): Promise<SignupUser> {
+  async signup(dto: SignupDto): Promise<AuthUserResponseDto> {
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
 
     try {
-      return await this.prisma.user.create({
+      const user = await this.prisma.user.create({
         data: {
           email: dto.email,
           passwordHash,
@@ -49,6 +49,8 @@ export class AuthService {
           createdAt: true,
         },
       });
+
+      return new AuthUserResponseDto(user);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -61,7 +63,9 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto): Promise<AuthResultWithRefreshToken<LoginResult>> {
+  async login(
+    dto: LoginDto,
+  ): Promise<AuthResultWithRefreshToken<LoginResponseDto>> {
     const user = await this.prisma.user.findUnique({
       where: {
         email: dto.email,
@@ -107,23 +111,14 @@ export class AuthService {
     ]);
 
     return {
-      result: {
-        accessToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          nickname: user.nickname,
-          avatarUrl: user.avatarUrl,
-          createdAt: user.createdAt,
-        },
-      },
+      result: new LoginResponseDto(accessToken, new AuthUserResponseDto(user)),
       refreshToken,
     };
   }
 
   async refresh(
     refreshToken: string | undefined,
-  ): Promise<AuthResultWithRefreshToken<RefreshResult>> {
+  ): Promise<AuthResultWithRefreshToken<RefreshResponseDto>> {
     if (!refreshToken) {
       throw new AppException(AUTH_ERROR.REFRESH_TOKEN_REQUIRED);
     }
@@ -179,7 +174,7 @@ export class AuthService {
     });
 
     return {
-      result: { accessToken },
+      result: new RefreshResponseDto(accessToken),
       refreshToken: nextRefreshToken,
     };
   }
@@ -200,7 +195,7 @@ export class AuthService {
     });
   }
 
-  async getMe(userId: string): Promise<SignupUser> {
+  async getMe(userId: string): Promise<AuthUserResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
@@ -218,7 +213,7 @@ export class AuthService {
       throw new AppException(AUTH_ERROR.INVALID_ACCESS_TOKEN);
     }
 
-    return user;
+    return new AuthUserResponseDto(user);
   }
 
   private getUniqueConstraintError(
