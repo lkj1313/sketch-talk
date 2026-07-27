@@ -11,6 +11,7 @@ export interface GameRoundStartedState {
   };
   difficulty: WordDifficulty;
   startedAt: string;
+  expiresAt: string;
 }
 
 export interface GameWordAssignedEvent {
@@ -56,4 +57,10 @@ export interface GameFinishedEvent {
     score: number;
   }>;
   endedAt: string;
+}
+
+export interface GameRoundTimedOutEvent {
+  gameSessionId: string;
+  roundId: string;
+  answer: string;
 }

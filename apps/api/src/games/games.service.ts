@@ -7,11 +7,16 @@ import {
   RoomStatus,
 } from '@/generated/prisma/client';
 import {
+  createRoundExpiresAt,
   DRAWER_SCORE_RATIO,
   GAME_DIFFICULTY_SCORE,
 } from '@/games/constants/game.constants';
 import { GAME_ERROR } from '@/games/constants/game-error.constants';
-import type { SubmitGameMessageResult } from '@/games/types/game-message.type';
+import type {
+  AdvanceGameResult,
+  ExpireGameRoundResult,
+  SubmitGameMessageResult,
+} from '@/games/types/game-message.type';
 import type {
   StartGameResult,
   StartGameRoom,
@@ -43,6 +48,7 @@ export class GamesService {
     const drawer = room.participants[0];
     const totalRounds = room.participants.length;
     const startedAt = new Date();
+    const expiresAt = createRoundExpiresAt(startedAt);
     const gameSession = await transaction.gameSession.create({
       data: {
         roomId: room.id,
@@ -63,10 +69,12 @@ export class GamesService {
         answerSnapshot: word.answer,
         difficultySnapshot: word.difficulty,
         startedAt,
+        expiresAt,
       },
       select: {
         id: true,
         startedAt: true,
+        expiresAt: true,
       },
     });
 
@@ -87,6 +95,7 @@ export class GamesService {
         drawer,
         difficulty: word.difficulty,
         startedAt: round.startedAt.toISOString(),
+        expiresAt: round.expiresAt.toISOString(),
       },
       drawerParticipantId: drawer.id,
       wordAssignment: {
@@ -149,6 +158,7 @@ export class GamesService {
           answerSnapshot: true,
           difficultySnapshot: true,
           status: true,
+          expiresAt: true,
           drawerParticipantId: true,
           drawerParticipant: {
             select: {
@@ -162,6 +172,7 @@ export class GamesService {
       if (
         !round ||
         round.status !== GameRoundStatus.DRAWING ||
+        round.expiresAt <= new Date() ||
         !round.drawerParticipant ||
         !round.drawerParticipantId
       ) {
@@ -268,7 +279,110 @@ export class GamesService {
         awardedScore: drawerScore,
       },
     };
+    const advance = await this.advanceGame(transaction, gameSession, endedAt);
 
+    return advance.type === 'NEXT'
+      ? {
+          type: 'CORRECT',
+          correctAnswer,
+          nextRound: advance.nextRound,
+          nextDrawerParticipantId: advance.nextDrawerParticipantId,
+          wordAssignment: advance.wordAssignment,
+        }
+      : {
+          type: 'FINISHED',
+          correctAnswer,
+          finished: advance.finished,
+        };
+  }
+
+  async expireRound(roundId: string): Promise<ExpireGameRoundResult> {
+    return this.prisma.$transaction(async (transaction) => {
+      const round = await transaction.gameRound.findUnique({
+        where: { id: roundId },
+        select: {
+          id: true,
+          roundNumber: true,
+          status: true,
+          expiresAt: true,
+          answerSnapshot: true,
+          gameSession: {
+            select: {
+              id: true,
+              roomId: true,
+              totalRounds: true,
+              currentRoundNumber: true,
+              status: true,
+              room: {
+                select: { code: true },
+              },
+            },
+          },
+        },
+      });
+      const endedAt = new Date();
+
+      if (
+        !round ||
+        round.status !== GameRoundStatus.DRAWING ||
+        round.expiresAt > endedAt ||
+        round.gameSession.status !== GameSessionStatus.PLAYING ||
+        !round.gameSession.roomId ||
+        !round.gameSession.room ||
+        round.roundNumber !== round.gameSession.currentRoundNumber
+      ) {
+        return null;
+      }
+
+      const updated = await transaction.gameRound.updateMany({
+        where: {
+          id: round.id,
+          status: GameRoundStatus.DRAWING,
+          expiresAt: { lte: endedAt },
+        },
+        data: {
+          status: GameRoundStatus.SKIPPED,
+          endedAt,
+        },
+      });
+
+      if (updated.count !== 1) {
+        return null;
+      }
+
+      const advance = await this.advanceGame(
+        transaction,
+        {
+          id: round.gameSession.id,
+          roomId: round.gameSession.roomId,
+          totalRounds: round.gameSession.totalRounds,
+          currentRoundNumber: round.gameSession.currentRoundNumber,
+        },
+        endedAt,
+      );
+
+      return {
+        roomCode: round.gameSession.room.code,
+        timedOut: {
+          gameSessionId: round.gameSession.id,
+          roundId: round.id,
+          answer: round.answerSnapshot,
+        },
+        ...advance,
+      };
+    });
+  }
+
+  private async advanceGame(
+    transaction: Prisma.TransactionClient,
+    gameSession: {
+      id: string;
+      roomId: string;
+      totalRounds: number;
+      currentRoundNumber: number;
+    },
+    endedAt: Date,
+  ): Promise<AdvanceGameResult> {
     if (gameSession.currentRoundNumber >= gameSession.totalRounds) {
       await transaction.gameSession.update({
         where: { id: gameSession.id },
@@ -296,7 +410,6 @@ export class GamesService {
 
       return {
         type: 'FINISHED',
-        correctAnswer,
         finished: {
           gameSessionId: gameSession.id,
           scores: scores.map((score) => ({
@@ -341,6 +454,7 @@ export class GamesService {
     const nextWord =
       availableWords[Math.floor(Math.random() * availableWords.length)];
     const nextRoundStartedAt = new Date();
+    const nextRoundExpiresAt = createRoundExpiresAt(nextRoundStartedAt);
     const nextRound = await transaction.gameRound.create({
       data: {
         gameSessionId: gameSession.id,
@@ -350,10 +464,12 @@ export class GamesService {
         answerSnapshot: nextWord.answer,
         difficultySnapshot: nextWord.difficulty,
         startedAt: nextRoundStartedAt,
+        expiresAt: nextRoundExpiresAt,
       },
       select: {
         id: true,
         startedAt: true,
+        expiresAt: true,
       },
     });
 
@@ -370,8 +486,7 @@ export class GamesService {
     });
 
     return {
-      type: 'CORRECT',
-      correctAnswer,
+      type: 'NEXT',
       nextRound: {
         gameSessionId: gameSession.id,
         roundId: nextRound.id,
@@ -380,6 +495,7 @@ export class GamesService {
         drawer: nextDrawer,
         difficulty: nextWord.difficulty,
         startedAt: nextRound.startedAt.toISOString(),
+        expiresAt: nextRound.expiresAt.toISOString(),
       },
       nextDrawerParticipantId: nextDrawer.id,
       wordAssignment: {

@@ -19,6 +19,7 @@ export type {
   GameFinishedEvent,
   GameMessageRequest,
   GameRoundStartedState,
+  GameRoundTimedOutEvent,
   GameWordAssignedEvent,
   WordDifficulty,
 } from "./game.js";
