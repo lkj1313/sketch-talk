@@ -149,6 +149,7 @@ model GameRound {
   guesserScore           Int              @default(0)
   drawerScore            Int              @default(0)
   startedAt              DateTime         @default(now())
+  expiresAt              DateTime
   endedAt                DateTime?
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
@@ -162,6 +163,7 @@ model GameRound {
   @@index([wordId])
   @@index([drawerParticipantId])
   @@index([guessedByParticipantId])
+  @@index([status, expiresAt])
 }
 
 model GuestSession {

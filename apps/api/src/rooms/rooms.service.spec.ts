@@ -122,6 +122,7 @@ describe('RoomsService', () => {
         drawer: { id: 'host-participant-id', nickname: '방장' },
         difficulty: 'EASY',
         startedAt: createdAt.toISOString(),
+        expiresAt: new Date(createdAt.getTime() + 120_000).toISOString(),
       },
       drawerParticipantId: 'host-participant-id',
       wordAssignment: {

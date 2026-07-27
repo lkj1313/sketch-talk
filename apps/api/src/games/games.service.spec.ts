@@ -42,7 +42,11 @@ describe('GamesService', () => {
     ]);
     gameSessionCreate.mockResolvedValue({ id: 'game-session-id' });
     gameRoundCreate.mockImplementation(({ data }) =>
-      Promise.resolve({ id: 'round-id', startedAt: data.startedAt }),
+      Promise.resolve({
+        id: 'round-id',
+        startedAt: data.startedAt,
+        expiresAt: data.expiresAt,
+      }),
     );
     wordUpdate.mockResolvedValue({ id: 'word-id' });
   });
@@ -70,10 +74,12 @@ describe('GamesService', () => {
         answerSnapshot: '고양이',
         difficultySnapshot: WordDifficulty.EASY,
         startedAt: expect.any(Date),
+        expiresAt: expect.any(Date),
       },
       select: {
         id: true,
         startedAt: true,
+        expiresAt: true,
       },
     });
     expect(wordUpdate).toHaveBeenCalledWith({
@@ -92,6 +98,7 @@ describe('GamesService', () => {
         drawer: room.participants[0],
         difficulty: WordDifficulty.EASY,
         startedAt: expect.any(String),
+        expiresAt: expect.any(String),
       },
       drawerParticipantId: 'host-id',
       wordAssignment: {
@@ -184,6 +191,7 @@ describe('GamesService.submitMessage', () => {
       answerSnapshot: '고양이',
       difficultySnapshot: WordDifficulty.EASY,
       status: 'DRAWING',
+      expiresAt: new Date(Date.now() + 120_000),
       drawerParticipantId: 'drawer-id',
       drawerParticipant: {
         id: 'drawer-id',
@@ -204,7 +212,11 @@ describe('GamesService.submitMessage', () => {
       },
     ]);
     gameRoundCreate.mockImplementation(({ data }) =>
-      Promise.resolve({ id: 'next-round-id', startedAt: data.startedAt }),
+      Promise.resolve({
+        id: 'next-round-id',
+        startedAt: data.startedAt,
+        expiresAt: data.expiresAt,
+      }),
     );
     gameSessionUpdate.mockResolvedValue({});
     wordUpdate.mockResolvedValue({});
@@ -264,7 +276,7 @@ describe('GamesService.submitMessage', () => {
         answerSnapshot: '강아지',
         difficultySnapshot: WordDifficulty.MEDIUM,
       }),
-      select: { id: true, startedAt: true },
+      select: { id: true, startedAt: true, expiresAt: true },
     });
     expect(result).toEqual(
       expect.objectContaining({
@@ -330,5 +342,53 @@ describe('GamesService.submitMessage', () => {
       }),
     );
     expect(gameRoundCreate).not.toHaveBeenCalled();
+  });
+
+  it('120초가 지난 라운드를 건너뛰고 다음 라운드를 생성한다', async () => {
+    gameRoundFindUnique.mockResolvedValue({
+      id: 'round-id',
+      roundNumber: 1,
+      status: 'DRAWING',
+      expiresAt: new Date(Date.now() - 1_000),
+      answerSnapshot: '고양이',
+      gameSession: {
+        id: 'game-session-id',
+        roomId: 'room-id',
+        totalRounds: 2,
+        currentRoundNumber: 1,
+        status: 'PLAYING',
+        room: { code: 'ABC234' },
+      },
+    });
+
+    const result = await service.expireRound('round-id');
+
+    expect(gameRoundUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'round-id',
+        status: 'DRAWING',
+        expiresAt: { lte: expect.any(Date) },
+      },
+      data: {
+        status: 'SKIPPED',
+        endedAt: expect.any(Date),
+      },
+    });
+    expect(roomParticipantUpdate).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        roomCode: 'ABC234',
+        type: 'NEXT',
+        timedOut: {
+          gameSessionId: 'game-session-id',
+          roundId: 'round-id',
+          answer: '고양이',
+        },
+        nextRound: expect.objectContaining({
+          roundNumber: 2,
+          expiresAt: expect.any(String),
+        }),
+      }),
+    );
   });
 });

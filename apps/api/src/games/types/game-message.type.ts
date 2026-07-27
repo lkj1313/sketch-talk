@@ -3,6 +3,7 @@ import type {
   GameCorrectAnswerEvent,
   GameFinishedEvent,
   GameRoundStartedState,
+  GameRoundTimedOutEvent,
   GameWordAssignedEvent,
 } from '@sketch-talk/contracts';
 
@@ -23,3 +24,22 @@ export type SubmitGameMessageResult =
       correctAnswer: GameCorrectAnswerEvent;
       finished: GameFinishedEvent;
     };
+
+export type AdvanceGameResult =
+  | {
+      type: 'NEXT';
+      nextRound: GameRoundStartedState;
+      nextDrawerParticipantId: string;
+      wordAssignment: GameWordAssignedEvent;
+    }
+  | {
+      type: 'FINISHED';
+      finished: GameFinishedEvent;
+    };
+
+export type ExpireGameRoundResult =
+  | ({
+      roomCode: string;
+      timedOut: GameRoundTimedOutEvent;
+    } & AdvanceGameResult)
+  | null;

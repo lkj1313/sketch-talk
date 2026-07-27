@@ -11,6 +11,10 @@ import type { RealtimeErrorResponse } from '@sketch-talk/contracts';
 import type { Namespace } from 'socket.io';
 import { AppException } from '@/common/exceptions/app.exception';
 import { GAME_MESSAGE_MAX_LENGTH } from '@/games/constants/game.constants';
+import {
+  GAME_DOMAIN_EVENT,
+  type GameRoundTimedOutDomainEvent,
+} from '@/games/events/game.events';
 import { GamesService } from '@/games/games.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
@@ -224,6 +228,38 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
       drawerParticipantId,
       ROOM_SOCKET_EVENT.WORD_ASSIGNED,
       wordAssignment,
+    );
+  }
+
+  @OnEvent(GAME_DOMAIN_EVENT.ROUND_TIMED_OUT)
+  async handleRoundTimedOut(
+    event: GameRoundTimedOutDomainEvent,
+  ): Promise<void> {
+    this.emitToRoom(
+      event.roomCode,
+      ROOM_SOCKET_EVENT.ROUND_TIMED_OUT,
+      event.timedOut,
+    );
+
+    if (event.type === 'FINISHED') {
+      this.emitToRoom(
+        event.roomCode,
+        ROOM_SOCKET_EVENT.GAME_FINISHED,
+        event.finished,
+      );
+      return;
+    }
+
+    this.emitToRoom(
+      event.roomCode,
+      ROOM_SOCKET_EVENT.ROUND_STARTED,
+      event.nextRound,
+    );
+    await this.emitToParticipant(
+      event.roomCode,
+      event.nextDrawerParticipantId,
+      ROOM_SOCKET_EVENT.WORD_ASSIGNED,
+      event.wordAssignment,
     );
   }
 
