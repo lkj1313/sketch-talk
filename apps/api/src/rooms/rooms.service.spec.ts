@@ -2,6 +2,7 @@ import { HttpStatus } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { RoomStatus, RoomVisibility } from '@/generated/prisma/client';
 import { AppException } from '@/common/exceptions/app.exception';
+import type { GamesService } from '@/games/games.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CreateRoomDto } from '@/rooms/dto/create-room.dto';
 import { RoomsService } from '@/rooms/rooms.service';
@@ -26,6 +27,10 @@ describe('RoomsService', () => {
     emit: eventEmit,
     emitAsync: eventEmitAsync,
   } as unknown as EventEmitter2;
+  const gamesStart = jest.fn();
+  const gamesService = {
+    start: gamesStart,
+  } as unknown as GamesService;
   const prisma = {
     roomParticipant: {
       findFirst: roomParticipantFindFirst,
@@ -47,7 +52,7 @@ describe('RoomsService', () => {
     },
     $transaction: transaction,
   } as unknown as PrismaService;
-  const roomsService = new RoomsService(prisma, eventEmitter);
+  const roomsService = new RoomsService(prisma, eventEmitter, gamesService);
   const createdAt = new Date();
   const dto: CreateRoomDto = {
     title: '같이 게임해요',
@@ -108,6 +113,23 @@ describe('RoomsService', () => {
       createdAt,
     });
     roomUpdateMany.mockResolvedValue({ count: 1 });
+    gamesStart.mockResolvedValue({
+      game: {
+        gameSessionId: 'game-session-id',
+        roundId: 'round-id',
+        roundNumber: 1,
+        totalRounds: 2,
+        drawer: { id: 'host-participant-id', nickname: '방장' },
+        difficulty: 'EASY',
+        startedAt: createdAt.toISOString(),
+      },
+      drawerParticipantId: 'host-participant-id',
+      wordAssignment: {
+        gameSessionId: 'game-session-id',
+        roundId: 'round-id',
+        answer: '고양이',
+      },
+    });
     transaction.mockImplementation(
       async (callback: (transaction: PrismaService) => Promise<unknown>) =>
         callback(prisma),
@@ -588,6 +610,26 @@ describe('RoomsService', () => {
     });
     expect(result.status).toBe(RoomStatus.PLAYING);
     expect(result.playerCount).toBe(2);
+    expect(gamesStart).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({
+        id: 'room-id',
+        code: 'ABC234',
+        participants: expect.arrayContaining([
+          expect.objectContaining({ id: 'host-participant-id' }),
+          expect.objectContaining({ id: 'participant-id' }),
+        ]),
+      }),
+    );
+    expect(eventEmit).toHaveBeenCalledWith(
+      'room.game.started',
+      expect.objectContaining({
+        roomCode: 'ABC234',
+        game: expect.objectContaining({ gameSessionId: 'game-session-id' }),
+        drawerParticipantId: 'host-participant-id',
+        wordAssignment: expect.objectContaining({ answer: '고양이' }),
+      }),
+    );
   });
 
   it('일반 참가자는 게임을 시작할 수 없다', async () => {
