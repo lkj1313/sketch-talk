@@ -1,6 +1,11 @@
 import { HttpStatus } from '@nestjs/common';
 
 export const WORD_ERROR = {
+  KIMI_NOT_CONFIGURED: {
+    statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+    code: 'WORD_KIMI_NOT_CONFIGURED',
+    message: '제시어 생성 서비스가 설정되지 않았습니다.',
+  },
   KIMI_REQUEST_FAILED: {
     statusCode: HttpStatus.BAD_GATEWAY,
     code: 'WORD_KIMI_REQUEST_FAILED',

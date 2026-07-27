@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
-import { AuthModule } from '@/auth/auth.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import { KimiService } from '@/words/providers/kimi.service';
-import { WordsController } from '@/words/words.controller';
+import { WordPoolScheduler } from '@/words/word-pool.scheduler';
 import { WordsService } from '@/words/words.service';
 
 @Module({
-  imports: [AuthModule],
-  controllers: [WordsController],
-  providers: [KimiService, WordsService],
+  imports: [ScheduleModule.forRoot()],
+  providers: [KimiService, WordsService, WordPoolScheduler],
   exports: [WordsService],
 })
 export class WordsModule {}

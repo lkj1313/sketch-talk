@@ -2,28 +2,32 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { AppException } from '@/common/exceptions/app.exception';
+import { WordDifficulty } from '@/generated/prisma/client';
 import { WORD_ERROR } from '@/words/constants/word-error.constants';
 
 type GenerateKimiWordsOptions = {
   count: number;
   category: string;
-  difficulty: string;
+  difficulty: WordDifficulty;
 };
 
 @Injectable()
 export class KimiService {
   private readonly logger = new Logger(KimiService.name);
-  private readonly client: OpenAI;
+  private readonly client: OpenAI | null;
   private readonly model: string;
 
   constructor(configService: ConfigService) {
-    this.client = new OpenAI({
-      apiKey: configService.getOrThrow<string>('KIMI_CODE_API_KEY'),
-      baseURL: configService.get<string>(
-        'KIMI_CODE_BASE_URL',
-        'https://api.kimi.com/coding/v1',
-      ),
-    });
+    const apiKey = configService.get<string>('KIMI_CODE_API_KEY');
+    this.client = apiKey
+      ? new OpenAI({
+          apiKey,
+          baseURL: configService.get<string>(
+            'KIMI_CODE_BASE_URL',
+            'https://api.kimi.com/coding/v1',
+          ),
+        })
+      : null;
     this.model = configService.get<string>(
       'KIMI_CODE_MODEL',
       'kimi-for-coding',
@@ -31,6 +35,10 @@ export class KimiService {
   }
 
   async generateWords(options: GenerateKimiWordsOptions): Promise<string[]> {
+    if (!this.client) {
+      throw new AppException(WORD_ERROR.KIMI_NOT_CONFIGURED);
+    }
+
     let content: string | null;
 
     try {
