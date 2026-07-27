@@ -10,6 +10,8 @@ import {
 import type { RealtimeErrorResponse } from '@sketch-talk/contracts';
 import type { Namespace } from 'socket.io';
 import { AppException } from '@/common/exceptions/app.exception';
+import { GAME_MESSAGE_MAX_LENGTH } from '@/games/constants/game.constants';
+import { GamesService } from '@/games/games.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
   getRoomSocketChannel,
@@ -46,6 +48,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     private readonly socketAuthService: SocketAuthService,
     private readonly prisma: PrismaService,
     private readonly roomsService: RoomsService,
+    private readonly gamesService: GamesService,
   ) {}
 
   afterInit(server: Namespace): void {
@@ -104,6 +107,69 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     client.emit(ROOM_SOCKET_EVENT.STATE, room);
   }
 
+  @SubscribeMessage(ROOM_SOCKET_EVENT.MESSAGE)
+  async handleGameMessage(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: unknown,
+  ): Promise<void> {
+    const message = this.parseGameMessage(payload);
+
+    if (!message) {
+      this.emitError(client, REALTIME_ERROR.INVALID_GAME_MESSAGE);
+      return;
+    }
+
+    const roomCode = client.data.roomCode;
+    const participantId = client.data.participantId;
+
+    if (!roomCode || !participantId) {
+      this.emitError(client, REALTIME_ERROR.ROOM_SUBSCRIPTION_REQUIRED);
+      return;
+    }
+
+    try {
+      const result = await this.gamesService.submitMessage(
+        roomCode,
+        participantId,
+        message,
+      );
+
+      if (result.type === 'CHAT') {
+        this.emitToRoom(roomCode, ROOM_SOCKET_EVENT.CHAT_MESSAGE, result.chat);
+        return;
+      }
+
+      this.emitToRoom(
+        roomCode,
+        ROOM_SOCKET_EVENT.CORRECT_ANSWER,
+        result.correctAnswer,
+      );
+
+      if (result.type === 'FINISHED') {
+        this.emitToRoom(
+          roomCode,
+          ROOM_SOCKET_EVENT.GAME_FINISHED,
+          result.finished,
+        );
+        return;
+      }
+
+      this.emitToRoom(
+        roomCode,
+        ROOM_SOCKET_EVENT.ROUND_STARTED,
+        result.nextRound,
+      );
+      await this.emitToParticipant(
+        roomCode,
+        result.nextDrawerParticipantId,
+        ROOM_SOCKET_EVENT.WORD_ASSIGNED,
+        result.wordAssignment,
+      );
+    } catch (error) {
+      this.emitError(client, this.resolveConnectionError(error));
+    }
+  }
+
   @OnEvent(ROOM_DOMAIN_EVENT.PARTICIPANT_JOINED)
   handleParticipantJoined(event: RoomParticipantJoinedDomainEvent): void {
     this.emitToRoom(
@@ -147,22 +213,18 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
   @OnEvent(ROOM_DOMAIN_EVENT.GAME_STARTED)
   async handleGameStarted(event: RoomGameStartedDomainEvent): Promise<void> {
     const { drawerParticipantId, wordAssignment, ...publicEvent } = event;
-    const channel = getRoomSocketChannel(event.roomCode);
-
     this.emitToRoom(
       event.roomCode,
       ROOM_SOCKET_EVENT.GAME_STARTED,
       publicEvent,
     );
 
-    const sockets = await this.server.in(channel).fetchSockets();
-    const drawerSockets = sockets.filter(
-      (socket) => socket.data.participantId === drawerParticipantId,
+    await this.emitToParticipant(
+      event.roomCode,
+      drawerParticipantId,
+      ROOM_SOCKET_EVENT.WORD_ASSIGNED,
+      wordAssignment,
     );
-
-    for (const socket of drawerSockets) {
-      socket.emit(ROOM_SOCKET_EVENT.WORD_ASSIGNED, wordAssignment);
-    }
   }
 
   private async authenticateConnection(
@@ -213,6 +275,18 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     return /^[A-HJ-NP-Z2-9]{6}$/.test(code) ? code : undefined;
   }
 
+  private parseGameMessage(payload: unknown): string | undefined {
+    if (!this.isRecord(payload) || typeof payload.message !== 'string') {
+      return undefined;
+    }
+
+    const message = payload.message.trim();
+
+    return message.length > 0 && message.length <= GAME_MESSAGE_MAX_LENGTH
+      ? message
+      : undefined;
+  }
+
   private emitError(
     client: AuthenticatedSocket,
     error: RealtimeErrorResponse,
@@ -222,6 +296,23 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
 
   private emitToRoom<T>(roomCode: string, event: string, data: T): void {
     this.server.to(getRoomSocketChannel(roomCode)).emit(event, data);
+  }
+
+  private async emitToParticipant<T>(
+    roomCode: string,
+    participantId: string,
+    event: string,
+    data: T,
+  ): Promise<void> {
+    const channel = getRoomSocketChannel(roomCode);
+    const sockets = await this.server.in(channel).fetchSockets();
+    const participantSockets = sockets.filter(
+      (socket) => socket.data.participantId === participantId,
+    );
+
+    for (const socket of participantSockets) {
+      socket.emit(event, data);
+    }
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {
