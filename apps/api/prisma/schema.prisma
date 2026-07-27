@@ -51,6 +51,18 @@ enum WordDifficulty {
   HARD
 }
 
+enum GameSessionStatus {
+  PLAYING
+  FINISHED
+  CANCELLED
+}
+
+enum GameRoundStatus {
+  DRAWING
+  FINISHED
+  SKIPPED
+}
+
 model Word {
   id               String         @id @default(uuid()) @db.Uuid
   answer           String         @db.VarChar(50)
@@ -62,6 +74,7 @@ model Word {
   lastUsedAt       DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  rounds           GameRound[]
 
   @@index([difficulty, isActive])
 }
@@ -81,6 +94,7 @@ model Room {
   endedAt           DateTime?
   hostParticipant   RoomParticipant?  @relation("RoomHost", fields: [hostParticipantId], references: [id], onDelete: SetNull)
   participants      RoomParticipant[] @relation("RoomParticipants")
+  gameSessions      GameSession[]
 
   @@index([visibility, status, createdAt])
 }
@@ -98,8 +112,56 @@ model RoomParticipant {
   user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   guestSession   GuestSession? @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
   hostedRoom     Room?         @relation("RoomHost")
+  drawnRounds    GameRound[]   @relation("GameRoundDrawer")
+  guessedRounds  GameRound[]   @relation("GameRoundGuesser")
 
   @@index([roomId])
+}
+
+model GameSession {
+  id                 String            @id @default(uuid()) @db.Uuid
+  roomId             String?           @db.Uuid
+  roomCode           String            @db.VarChar(8)
+  roomTitle          String            @db.VarChar(50)
+  status             GameSessionStatus @default(PLAYING)
+  totalRounds        Int               @default(10) @db.SmallInt
+  currentRoundNumber Int               @default(0) @db.SmallInt
+  startedAt          DateTime          @default(now())
+  endedAt            DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  room               Room?             @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  rounds             GameRound[]
+
+  @@index([roomId, status, startedAt])
+}
+
+model GameRound {
+  id                     String           @id @default(uuid()) @db.Uuid
+  gameSessionId          String           @db.Uuid
+  wordId                 String           @db.Uuid
+  drawerParticipantId    String?          @db.Uuid
+  guessedByParticipantId String?          @db.Uuid
+  roundNumber            Int              @db.SmallInt
+  status                 GameRoundStatus  @default(DRAWING)
+  answerSnapshot         String           @db.VarChar(50)
+  difficultySnapshot     WordDifficulty
+  guesserScore           Int              @default(0)
+  drawerScore            Int              @default(0)
+  startedAt              DateTime         @default(now())
+  endedAt                DateTime?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  gameSession            GameSession      @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  word                   Word             @relation(fields: [wordId], references: [id], onDelete: Restrict)
+  drawerParticipant      RoomParticipant? @relation("GameRoundDrawer", fields: [drawerParticipantId], references: [id], onDelete: SetNull)
+  guessedByParticipant   RoomParticipant? @relation("GameRoundGuesser", fields: [guessedByParticipantId], references: [id], onDelete: SetNull)
+
+  @@unique([gameSessionId, roundNumber])
+  @@unique([gameSessionId, wordId])
+  @@index([wordId])
+  @@index([drawerParticipantId])
+  @@index([guessedByParticipantId])
 }
 
 model GuestSession {
