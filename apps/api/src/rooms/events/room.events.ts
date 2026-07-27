@@ -1,4 +1,5 @@
 import type {
+  GameWordAssignedEvent,
   RoomGameStartedEvent,
   RoomHostChangedEvent,
   RoomParticipantJoinedEvent,
@@ -18,4 +19,7 @@ export type RoomParticipantJoinedDomainEvent = RoomParticipantJoinedEvent;
 export type RoomParticipantLeftDomainEvent = RoomParticipantLeftEvent;
 export type RoomHostChangedDomainEvent = RoomHostChangedEvent;
 export type RoomReadyChangedDomainEvent = RoomReadyChangedEvent;
-export type RoomGameStartedDomainEvent = RoomGameStartedEvent;
+export interface RoomGameStartedDomainEvent extends RoomGameStartedEvent {
+  drawerParticipantId: string;
+  wordAssignment: GameWordAssignedEvent;
+}

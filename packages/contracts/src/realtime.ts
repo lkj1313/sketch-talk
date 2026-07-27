@@ -2,6 +2,7 @@ import type {
   RoomDetailResponse,
   RoomParticipantResponse,
 } from "./room.js";
+import type { GameRoundStartedState } from "./game.js";
 
 export interface RoomSubscribeRequest {
   code: string;
@@ -36,6 +37,7 @@ export interface RoomReadyChangedEvent {
 export interface RoomGameStartedEvent {
   roomCode: string;
   room: RoomDetailResponse;
+  game: GameRoundStartedState;
 }
 
 export interface RealtimeErrorResponse {

@@ -9,6 +9,7 @@ export const ROOM_SOCKET_EVENT = {
   HOST_CHANGED: 'room:host-changed',
   READY_CHANGED: 'room:ready-changed',
   GAME_STARTED: 'room:game-started',
+  WORD_ASSIGNED: 'game:word-assigned',
   ERROR: 'realtime:error',
 } as const;
 

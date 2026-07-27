@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AUTH_ERROR } from '@/auth/constants/auth-error.constants';
 import type { RequestActor } from '@/auth/types/request-actor.type';
 import { AppException } from '@/common/exceptions/app.exception';
+import { GamesService } from '@/games/games.service';
 import { Prisma, RoomStatus } from '@/generated/prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { ROOM_CODE_GENERATION_MAX_ATTEMPTS } from '@/rooms/constants/room.constants';
@@ -25,6 +26,7 @@ export class RoomsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly gamesService: GamesService,
   ) {}
 
   async create(
@@ -387,7 +389,7 @@ export class RoomsService {
     actor: RequestActor,
     code: string,
   ): Promise<RoomDetailResponseDto> {
-    const room = await this.prisma.$transaction(async (transaction) => {
+    const result = await this.prisma.$transaction(async (transaction) => {
       const participant = await transaction.roomParticipant.findFirst({
         where: {
           room: { code },
@@ -474,19 +476,25 @@ export class RoomsService {
         throw new AppException(ROOM_ERROR.START_NOT_ALLOWED);
       }
 
-      return new RoomDetailResponseDto({
-        ...room,
-        status: RoomStatus.PLAYING,
-        hostParticipant,
-      });
+      const game = await this.gamesService.start(transaction, room);
+
+      return {
+        room: new RoomDetailResponseDto({
+          ...room,
+          status: RoomStatus.PLAYING,
+          hostParticipant,
+        }),
+        game,
+      };
     });
 
     this.eventEmitter.emit(ROOM_DOMAIN_EVENT.GAME_STARTED, {
       roomCode: code,
-      room,
+      room: result.room,
+      ...result.game,
     });
 
-    return room;
+    return result.room;
   }
 
   private async createRoomTransaction(

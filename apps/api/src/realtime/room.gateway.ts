@@ -145,8 +145,24 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
   }
 
   @OnEvent(ROOM_DOMAIN_EVENT.GAME_STARTED)
-  handleGameStarted(event: RoomGameStartedDomainEvent): void {
-    this.emitToRoom(event.roomCode, ROOM_SOCKET_EVENT.GAME_STARTED, event);
+  async handleGameStarted(event: RoomGameStartedDomainEvent): Promise<void> {
+    const { drawerParticipantId, wordAssignment, ...publicEvent } = event;
+    const channel = getRoomSocketChannel(event.roomCode);
+
+    this.emitToRoom(
+      event.roomCode,
+      ROOM_SOCKET_EVENT.GAME_STARTED,
+      publicEvent,
+    );
+
+    const sockets = await this.server.in(channel).fetchSockets();
+    const drawerSockets = sockets.filter(
+      (socket) => socket.data.participantId === drawerParticipantId,
+    );
+
+    for (const socket of drawerSockets) {
+      socket.emit(ROOM_SOCKET_EVENT.WORD_ASSIGNED, wordAssignment);
+    }
   }
 
   private async authenticateConnection(
