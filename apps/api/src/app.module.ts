@@ -8,6 +8,7 @@ import { GuestSessionModule } from '@/guest-session/guest-session.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { RealtimeModule } from '@/realtime/realtime.module';
 import { RoomsModule } from '@/rooms/rooms.module';
+import { WordsModule } from '@/words/words.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { RoomsModule } from '@/rooms/rooms.module';
     GuestSessionModule,
     RoomsModule,
     RealtimeModule,
+    WordsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
