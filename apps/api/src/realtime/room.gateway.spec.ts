@@ -26,7 +26,12 @@ describe('RoomGateway', () => {
         ]),
       }),
     };
-    const gateway = new RoomGateway({} as never, {} as never, {} as never);
+    const gateway = new RoomGateway(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
     (gateway as unknown as { server: typeof server }).server = server;
     const event: RoomGameStartedDomainEvent = {
       roomCode: 'ABC234',

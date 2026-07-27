@@ -14,6 +14,10 @@ export type {
 } from "./api-response.js";
 export type { GuestSessionResponse } from "./guest-session.js";
 export type {
+  GameChatMessageEvent,
+  GameCorrectAnswerEvent,
+  GameFinishedEvent,
+  GameMessageRequest,
   GameRoundStartedState,
   GameWordAssignedEvent,
   WordDifficulty,

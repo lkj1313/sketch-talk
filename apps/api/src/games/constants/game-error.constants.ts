@@ -1,6 +1,21 @@
 import { HttpStatus } from '@nestjs/common';
 
 export const GAME_ERROR = {
+  NOT_PLAYING: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'GAME_NOT_PLAYING',
+    message: '진행 중인 게임이 없습니다.',
+  },
+  ROUND_NOT_ACTIVE: {
+    statusCode: HttpStatus.CONFLICT,
+    code: 'GAME_ROUND_NOT_ACTIVE',
+    message: '진행 중인 라운드가 없습니다.',
+  },
+  PARTICIPANT_NOT_FOUND: {
+    statusCode: HttpStatus.NOT_FOUND,
+    code: 'GAME_PARTICIPANT_NOT_FOUND',
+    message: '게임 참가자를 찾을 수 없습니다.',
+  },
   WORD_POOL_EMPTY: {
     statusCode: HttpStatus.SERVICE_UNAVAILABLE,
     code: 'GAME_WORD_POOL_EMPTY',
