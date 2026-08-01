@@ -27,6 +27,64 @@ import { PrismaService } from '@/prisma/prisma.service';
 export class GamesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findActiveDrawingRoundId(roomCode: string): Promise<string | null> {
+    const round = await this.prisma.gameRound.findFirst({
+      where: {
+        status: GameRoundStatus.DRAWING,
+        expiresAt: { gt: new Date() },
+        gameSession: {
+          status: GameSessionStatus.PLAYING,
+          room: { code: roomCode },
+        },
+      },
+      orderBy: { roundNumber: 'desc' },
+      select: { id: true },
+    });
+
+    return round?.id ?? null;
+  }
+
+  async assertCanDraw(
+    roomCode: string,
+    participantId: string,
+    roundId: string,
+  ): Promise<void> {
+    const round = await this.prisma.gameRound.findFirst({
+      where: {
+        id: roundId,
+        gameSession: {
+          status: GameSessionStatus.PLAYING,
+          room: {
+            code: roomCode,
+            participants: { some: { id: participantId } },
+          },
+        },
+      },
+      select: {
+        roundNumber: true,
+        status: true,
+        expiresAt: true,
+        drawerParticipantId: true,
+        gameSession: {
+          select: { currentRoundNumber: true },
+        },
+      },
+    });
+
+    if (
+      !round ||
+      round.status !== GameRoundStatus.DRAWING ||
+      round.expiresAt <= new Date() ||
+      round.roundNumber !== round.gameSession.currentRoundNumber
+    ) {
+      throw new AppException(GAME_ERROR.ROUND_NOT_ACTIVE);
+    }
+
+    if (round.drawerParticipantId !== participantId) {
+      throw new AppException(GAME_ERROR.DRAWING_NOT_ALLOWED);
+    }
+  }
+
   async start(
     transaction: Prisma.TransactionClient,
     room: StartGameRoom,

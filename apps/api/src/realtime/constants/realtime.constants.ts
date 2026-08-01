@@ -16,6 +16,11 @@ export const ROOM_SOCKET_EVENT = {
   ROUND_TIMED_OUT: 'game:round-timed-out',
   GAME_FINISHED: 'game:finished',
   WORD_ASSIGNED: 'game:word-assigned',
+  DRAWING_STROKE: 'drawing:stroke',
+  DRAWING_STROKE_ADDED: 'drawing:stroke-added',
+  DRAWING_CLEAR: 'drawing:clear',
+  DRAWING_CLEARED: 'drawing:cleared',
+  DRAWING_SYNC: 'drawing:sync',
   ERROR: 'realtime:error',
 } as const;
 

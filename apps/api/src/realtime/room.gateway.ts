@@ -7,7 +7,12 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import type { RealtimeErrorResponse } from '@sketch-talk/contracts';
+import type {
+  DrawingClearRequest,
+  DrawingPoint,
+  DrawingStroke,
+  RealtimeErrorResponse,
+} from '@sketch-talk/contracts';
 import type { Namespace } from 'socket.io';
 import { AppException } from '@/common/exceptions/app.exception';
 import { GAME_MESSAGE_MAX_LENGTH } from '@/games/constants/game.constants';
@@ -18,6 +23,14 @@ import {
 import { GamesService } from '@/games/games.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
+  DRAWING_COLOR_MAX_LENGTH,
+  DRAWING_COORDINATE_MAX,
+  DRAWING_COORDINATE_MIN,
+  DRAWING_POINTS_MAX_LENGTH,
+  DRAWING_WIDTH_MAX,
+  DRAWING_WIDTH_MIN,
+} from '@/realtime/constants/drawing.constants';
+import {
   getRoomSocketChannel,
   ROOM_SOCKET_EVENT,
   ROOM_SOCKET_NAMESPACE,
@@ -25,6 +38,7 @@ import {
 } from '@/realtime/constants/realtime.constants';
 import { REALTIME_ERROR } from '@/realtime/constants/realtime-error.constants';
 import { SocketAuthService } from '@/realtime/socket-auth.service';
+import { DrawingStateService } from '@/realtime/drawing-state.service';
 import type { AuthenticatedSocket } from '@/realtime/types/authenticated-socket.type';
 import {
   ROOM_DOMAIN_EVENT,
@@ -53,6 +67,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     private readonly prisma: PrismaService,
     private readonly roomsService: RoomsService,
     private readonly gamesService: GamesService,
+    private readonly drawingStateService: DrawingStateService,
   ) {}
 
   afterInit(server: Namespace): void {
@@ -109,6 +124,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     client.data.roomCode = code;
     client.data.participantId = participant.id;
     client.emit(ROOM_SOCKET_EVENT.STATE, room);
+    await this.emitDrawingSync(client, code);
   }
 
   @SubscribeMessage(ROOM_SOCKET_EVENT.MESSAGE)
@@ -148,6 +164,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
         ROOM_SOCKET_EVENT.CORRECT_ANSWER,
         result.correctAnswer,
       );
+      this.drawingStateService.clearRound(result.correctAnswer.roundId);
 
       if (result.type === 'FINISHED') {
         this.emitToRoom(
@@ -169,6 +186,79 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
         ROOM_SOCKET_EVENT.WORD_ASSIGNED,
         result.wordAssignment,
       );
+    } catch (error) {
+      this.emitError(client, this.resolveConnectionError(error));
+    }
+  }
+
+  @SubscribeMessage(ROOM_SOCKET_EVENT.DRAWING_STROKE)
+  async handleDrawingStroke(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: unknown,
+  ): Promise<void> {
+    const stroke = this.parseDrawingStroke(payload);
+
+    if (!stroke) {
+      this.emitError(client, REALTIME_ERROR.INVALID_DRAWING_STROKE);
+      return;
+    }
+
+    const roomCode = client.data.roomCode;
+    const participantId = client.data.participantId;
+
+    if (!roomCode || !participantId) {
+      this.emitError(client, REALTIME_ERROR.ROOM_SUBSCRIPTION_REQUIRED);
+      return;
+    }
+
+    try {
+      await this.gamesService.assertCanDraw(
+        roomCode,
+        participantId,
+        stroke.roundId,
+      );
+
+      if (!this.drawingStateService.appendStroke(stroke)) {
+        this.emitError(client, REALTIME_ERROR.DRAWING_HISTORY_LIMIT_EXCEEDED);
+        return;
+      }
+
+      client
+        .to(getRoomSocketChannel(roomCode))
+        .emit(ROOM_SOCKET_EVENT.DRAWING_STROKE_ADDED, stroke);
+    } catch (error) {
+      this.emitError(client, this.resolveConnectionError(error));
+    }
+  }
+
+  @SubscribeMessage(ROOM_SOCKET_EVENT.DRAWING_CLEAR)
+  async handleDrawingClear(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: unknown,
+  ): Promise<void> {
+    const request = this.parseDrawingClear(payload);
+
+    if (!request) {
+      this.emitError(client, REALTIME_ERROR.INVALID_DRAWING_CLEAR);
+      return;
+    }
+
+    const roomCode = client.data.roomCode;
+    const participantId = client.data.participantId;
+
+    if (!roomCode || !participantId) {
+      this.emitError(client, REALTIME_ERROR.ROOM_SUBSCRIPTION_REQUIRED);
+      return;
+    }
+
+    try {
+      await this.gamesService.assertCanDraw(
+        roomCode,
+        participantId,
+        request.roundId,
+      );
+      this.drawingStateService.clearRound(request.roundId);
+      this.emitToRoom(roomCode, ROOM_SOCKET_EVENT.DRAWING_CLEARED, request);
     } catch (error) {
       this.emitError(client, this.resolveConnectionError(error));
     }
@@ -217,6 +307,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
   @OnEvent(ROOM_DOMAIN_EVENT.GAME_STARTED)
   async handleGameStarted(event: RoomGameStartedDomainEvent): Promise<void> {
     const { drawerParticipantId, wordAssignment, ...publicEvent } = event;
+    this.drawingStateService.clearRound(event.game.roundId);
     this.emitToRoom(
       event.roomCode,
       ROOM_SOCKET_EVENT.GAME_STARTED,
@@ -235,6 +326,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
   async handleRoundTimedOut(
     event: GameRoundTimedOutDomainEvent,
   ): Promise<void> {
+    this.drawingStateService.clearRound(event.timedOut.roundId);
     this.emitToRoom(
       event.roomCode,
       ROOM_SOCKET_EVENT.ROUND_TIMED_OUT,
@@ -321,6 +413,112 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     return message.length > 0 && message.length <= GAME_MESSAGE_MAX_LENGTH
       ? message
       : undefined;
+  }
+
+  private parseDrawingStroke(payload: unknown): DrawingStroke | undefined {
+    if (
+      !this.isRecord(payload) ||
+      typeof payload.roundId !== 'string' ||
+      typeof payload.strokeId !== 'string' ||
+      (payload.tool !== 'PEN' && payload.tool !== 'ERASER') ||
+      typeof payload.color !== 'string' ||
+      payload.color.length > DRAWING_COLOR_MAX_LENGTH ||
+      !/^#[0-9a-fA-F]{6}$/.test(payload.color) ||
+      !this.isNumberInRange(
+        payload.width,
+        DRAWING_WIDTH_MIN,
+        DRAWING_WIDTH_MAX,
+      ) ||
+      !Array.isArray(payload.points) ||
+      payload.points.length === 0 ||
+      payload.points.length > DRAWING_POINTS_MAX_LENGTH ||
+      !this.isUuid(payload.roundId) ||
+      !this.isUuid(payload.strokeId)
+    ) {
+      return undefined;
+    }
+
+    const points = payload.points.map((point) => this.parseDrawingPoint(point));
+
+    if (points.some((point) => !point)) {
+      return undefined;
+    }
+
+    return {
+      roundId: payload.roundId,
+      strokeId: payload.strokeId,
+      tool: payload.tool,
+      color: payload.color,
+      width: payload.width,
+      points: points as DrawingPoint[],
+    };
+  }
+
+  private parseDrawingPoint(value: unknown): DrawingPoint | undefined {
+    if (
+      !this.isRecord(value) ||
+      !this.isNumberInRange(
+        value.x,
+        DRAWING_COORDINATE_MIN,
+        DRAWING_COORDINATE_MAX,
+      ) ||
+      !this.isNumberInRange(
+        value.y,
+        DRAWING_COORDINATE_MIN,
+        DRAWING_COORDINATE_MAX,
+      )
+    ) {
+      return undefined;
+    }
+
+    return { x: value.x, y: value.y };
+  }
+
+  private parseDrawingClear(payload: unknown): DrawingClearRequest | undefined {
+    if (
+      !this.isRecord(payload) ||
+      typeof payload.roundId !== 'string' ||
+      !this.isUuid(payload.roundId)
+    ) {
+      return undefined;
+    }
+
+    return { roundId: payload.roundId };
+  }
+
+  private async emitDrawingSync(
+    client: AuthenticatedSocket,
+    roomCode: string,
+  ): Promise<void> {
+    const roundId = await this.gamesService.findActiveDrawingRoundId(roomCode);
+
+    if (!roundId) {
+      return;
+    }
+
+    client.emit(
+      ROOM_SOCKET_EVENT.DRAWING_SYNC,
+      this.drawingStateService.getSyncEvent(roundId),
+    );
+  }
+
+  private isNumberInRange(
+    value: unknown,
+    minimum: number,
+    maximum: number,
+  ): value is number {
+    return (
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      value >= minimum &&
+      value <= maximum
+    );
+  }
+
+  private isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
   }
 
   private emitError(
