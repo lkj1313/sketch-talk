@@ -130,6 +130,66 @@ describe('GamesService', () => {
   });
 });
 
+describe('GamesService.assertCanDraw', () => {
+  const gameRoundFindFirst = jest.fn();
+  const service = new GamesService({
+    gameRound: { findFirst: gameRoundFindFirst },
+  } as never);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    gameRoundFindFirst.mockResolvedValue({
+      roundNumber: 1,
+      status: 'DRAWING',
+      expiresAt: new Date(Date.now() + 120_000),
+      drawerParticipantId: 'drawer-id',
+      gameSession: { currentRoundNumber: 1 },
+    });
+  });
+
+  it('현재 라운드의 출제자에게 그림 전송을 허용한다', async () => {
+    await expect(
+      service.assertCanDraw('ABC234', 'drawer-id', 'round-id'),
+    ).resolves.toBeUndefined();
+
+    expect(gameRoundFindFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'round-id',
+        gameSession: {
+          status: 'PLAYING',
+          room: {
+            code: 'ABC234',
+            participants: { some: { id: 'drawer-id' } },
+          },
+        },
+      },
+      select: {
+        roundNumber: true,
+        status: true,
+        expiresAt: true,
+        drawerParticipantId: true,
+        gameSession: { select: { currentRoundNumber: true } },
+      },
+    });
+  });
+
+  it('출제자가 아닌 참가자의 그림 전송을 거부한다', async () => {
+    const error: unknown = await service
+      .assertCanDraw('ABC234', 'participant-id', 'round-id')
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AppException);
+    if (!(error instanceof AppException)) {
+      throw new Error('AppException이 발생해야 합니다.');
+    }
+    expect(error.getStatus()).toBe(HttpStatus.FORBIDDEN);
+    expect(error.getResponse()).toEqual({
+      code: 'GAME_DRAWING_NOT_ALLOWED',
+      message: '현재 출제자만 그림을 그릴 수 있습니다.',
+    });
+  });
+});
+
 describe('GamesService.submitMessage', () => {
   const roomParticipantFindFirst = jest.fn();
   const roomParticipantFindMany = jest.fn();

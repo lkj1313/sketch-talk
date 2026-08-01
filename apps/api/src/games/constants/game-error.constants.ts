@@ -16,6 +16,11 @@ export const GAME_ERROR = {
     code: 'GAME_PARTICIPANT_NOT_FOUND',
     message: '게임 참가자를 찾을 수 없습니다.',
   },
+  DRAWING_NOT_ALLOWED: {
+    statusCode: HttpStatus.FORBIDDEN,
+    code: 'GAME_DRAWING_NOT_ALLOWED',
+    message: '현재 출제자만 그림을 그릴 수 있습니다.',
+  },
   WORD_POOL_EMPTY: {
     statusCode: HttpStatus.SERVICE_UNAVAILABLE,
     code: 'GAME_WORD_POOL_EMPTY',

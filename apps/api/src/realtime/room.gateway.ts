@@ -7,7 +7,11 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import type { RealtimeErrorResponse } from '@sketch-talk/contracts';
+import type {
+  DrawingPoint,
+  DrawingStroke,
+  RealtimeErrorResponse,
+} from '@sketch-talk/contracts';
 import type { Namespace } from 'socket.io';
 import { AppException } from '@/common/exceptions/app.exception';
 import { GAME_MESSAGE_MAX_LENGTH } from '@/games/constants/game.constants';
@@ -17,6 +21,14 @@ import {
 } from '@/games/events/game.events';
 import { GamesService } from '@/games/games.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import {
+  DRAWING_COLOR_MAX_LENGTH,
+  DRAWING_COORDINATE_MAX,
+  DRAWING_COORDINATE_MIN,
+  DRAWING_POINTS_MAX_LENGTH,
+  DRAWING_WIDTH_MAX,
+  DRAWING_WIDTH_MIN,
+} from '@/realtime/constants/drawing.constants';
 import {
   getRoomSocketChannel,
   ROOM_SOCKET_EVENT,
@@ -174,6 +186,40 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     }
   }
 
+  @SubscribeMessage(ROOM_SOCKET_EVENT.DRAWING_STROKE)
+  async handleDrawingStroke(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: unknown,
+  ): Promise<void> {
+    const stroke = this.parseDrawingStroke(payload);
+
+    if (!stroke) {
+      this.emitError(client, REALTIME_ERROR.INVALID_DRAWING_STROKE);
+      return;
+    }
+
+    const roomCode = client.data.roomCode;
+    const participantId = client.data.participantId;
+
+    if (!roomCode || !participantId) {
+      this.emitError(client, REALTIME_ERROR.ROOM_SUBSCRIPTION_REQUIRED);
+      return;
+    }
+
+    try {
+      await this.gamesService.assertCanDraw(
+        roomCode,
+        participantId,
+        stroke.roundId,
+      );
+      client
+        .to(getRoomSocketChannel(roomCode))
+        .emit(ROOM_SOCKET_EVENT.DRAWING_STROKE_ADDED, stroke);
+    } catch (error) {
+      this.emitError(client, this.resolveConnectionError(error));
+    }
+  }
+
   @OnEvent(ROOM_DOMAIN_EVENT.PARTICIPANT_JOINED)
   handleParticipantJoined(event: RoomParticipantJoinedDomainEvent): void {
     this.emitToRoom(
@@ -321,6 +367,84 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     return message.length > 0 && message.length <= GAME_MESSAGE_MAX_LENGTH
       ? message
       : undefined;
+  }
+
+  private parseDrawingStroke(payload: unknown): DrawingStroke | undefined {
+    if (
+      !this.isRecord(payload) ||
+      typeof payload.roundId !== 'string' ||
+      typeof payload.strokeId !== 'string' ||
+      (payload.tool !== 'PEN' && payload.tool !== 'ERASER') ||
+      typeof payload.color !== 'string' ||
+      payload.color.length > DRAWING_COLOR_MAX_LENGTH ||
+      !/^#[0-9a-fA-F]{6}$/.test(payload.color) ||
+      !this.isNumberInRange(
+        payload.width,
+        DRAWING_WIDTH_MIN,
+        DRAWING_WIDTH_MAX,
+      ) ||
+      !Array.isArray(payload.points) ||
+      payload.points.length === 0 ||
+      payload.points.length > DRAWING_POINTS_MAX_LENGTH ||
+      !this.isUuid(payload.roundId) ||
+      !this.isUuid(payload.strokeId)
+    ) {
+      return undefined;
+    }
+
+    const points = payload.points.map((point) => this.parseDrawingPoint(point));
+
+    if (points.some((point) => !point)) {
+      return undefined;
+    }
+
+    return {
+      roundId: payload.roundId,
+      strokeId: payload.strokeId,
+      tool: payload.tool,
+      color: payload.color,
+      width: payload.width,
+      points: points as DrawingPoint[],
+    };
+  }
+
+  private parseDrawingPoint(value: unknown): DrawingPoint | undefined {
+    if (
+      !this.isRecord(value) ||
+      !this.isNumberInRange(
+        value.x,
+        DRAWING_COORDINATE_MIN,
+        DRAWING_COORDINATE_MAX,
+      ) ||
+      !this.isNumberInRange(
+        value.y,
+        DRAWING_COORDINATE_MIN,
+        DRAWING_COORDINATE_MAX,
+      )
+    ) {
+      return undefined;
+    }
+
+    return { x: value.x, y: value.y };
+  }
+
+  private isNumberInRange(
+    value: unknown,
+    minimum: number,
+    maximum: number,
+  ): value is number {
+    return (
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      value >= minimum &&
+      value <= maximum
+    );
+  }
+
+  private isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
   }
 
   private emitError(
