@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   ConnectedSocket,
@@ -42,6 +43,7 @@ import { REALTIME_RATE_LIMIT } from '@/realtime/constants/realtime-rate-limit.co
 import { SocketAuthService } from '@/realtime/socket-auth.service';
 import { DrawingStateService } from '@/realtime/drawing-state.service';
 import { RealtimeRateLimitService } from '@/realtime/realtime-rate-limit.service';
+import { RoomPresenceService } from '@/realtime/room-presence.service';
 import type { AuthenticatedSocket } from '@/realtime/types/authenticated-socket.type';
 import {
   ROOM_DOMAIN_EVENT,
@@ -64,6 +66,8 @@ import { RoomsService } from '@/rooms/rooms.service';
 export class RoomGateway
   implements OnGatewayInit<Namespace>, OnGatewayDisconnect<AuthenticatedSocket>
 {
+  private readonly logger = new Logger(RoomGateway.name);
+
   @WebSocketServer()
   private server!: Namespace;
 
@@ -74,6 +78,7 @@ export class RoomGateway
     private readonly gamesService: GamesService,
     private readonly drawingStateService: DrawingStateService,
     private readonly rateLimitService: RealtimeRateLimitService,
+    private readonly roomPresenceService: RoomPresenceService,
   ) {}
 
   afterInit(server: Namespace): void {
@@ -84,6 +89,41 @@ export class RoomGateway
 
   handleDisconnect(client: AuthenticatedSocket): void {
     this.rateLimitService.clearSocket(client.id);
+
+    const actor = client.data.actor;
+    const roomCode = client.data.roomCode;
+    const participantId = client.data.participantId;
+
+    if (!actor || !roomCode || !participantId) {
+      return;
+    }
+
+    this.roomPresenceService.scheduleLeave(participantId, async () => {
+      try {
+        const sockets = await this.server
+          .in(getRoomSocketChannel(roomCode))
+          .fetchSockets();
+        const reconnected = sockets.some(
+          (socket) => socket.data.participantId === participantId,
+        );
+
+        if (reconnected) {
+          return;
+        }
+
+        await this.roomsService.leave(actor, roomCode);
+      } catch (error) {
+        if (this.isParticipantNotFoundError(error)) {
+          return;
+        }
+
+        const stack = error instanceof Error ? error.stack : undefined;
+        this.logger.error(
+          `연결 종료 참가자 퇴장 처리에 실패했습니다. participantId=${participantId}`,
+          stack,
+        );
+      }
+    });
   }
 
   @SubscribeMessage(ROOM_SOCKET_EVENT.SUBSCRIBE)
@@ -131,6 +171,7 @@ export class RoomGateway
     }
 
     await client.join(getRoomSocketChannel(code));
+    this.roomPresenceService.cancelLeave(participant.id);
     client.data.roomCode = code;
     client.data.participantId = participant.id;
     client.emit(ROOM_SOCKET_EVENT.STATE, room);
@@ -317,6 +358,7 @@ export class RoomGateway
   async handleParticipantLeft(
     event: RoomParticipantLeftDomainEvent,
   ): Promise<void> {
+    this.roomPresenceService.cancelLeave(event.participantId);
     const channel = getRoomSocketChannel(event.roomCode);
 
     if (event.roomDeleted) {
@@ -617,5 +659,17 @@ export class RoomGateway
 
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
+  }
+
+  private isParticipantNotFoundError(error: unknown): boolean {
+    if (!(error instanceof AppException)) {
+      return false;
+    }
+
+    const response = error.getResponse();
+
+    return (
+      this.isRecord(response) && response.code === 'ROOM_PARTICIPANT_NOT_FOUND'
+    );
   }
 }
