@@ -1,0 +1,1 @@
+export const ROOM_RECONNECT_GRACE_PERIOD_MS = 30_000;

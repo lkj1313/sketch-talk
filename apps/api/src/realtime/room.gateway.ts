@@ -1,8 +1,10 @@
+import { Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   ConnectedSocket,
   MessageBody,
   OnGatewayInit,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -37,8 +39,11 @@ import {
   ROOM_SOCKET_PATH,
 } from '@/realtime/constants/realtime.constants';
 import { REALTIME_ERROR } from '@/realtime/constants/realtime-error.constants';
+import { REALTIME_RATE_LIMIT } from '@/realtime/constants/realtime-rate-limit.constants';
 import { SocketAuthService } from '@/realtime/socket-auth.service';
 import { DrawingStateService } from '@/realtime/drawing-state.service';
+import { RealtimeRateLimitService } from '@/realtime/realtime-rate-limit.service';
+import { RoomPresenceService } from '@/realtime/room-presence.service';
 import type { AuthenticatedSocket } from '@/realtime/types/authenticated-socket.type';
 import {
   ROOM_DOMAIN_EVENT,
@@ -58,7 +63,11 @@ import { RoomsService } from '@/rooms/rooms.service';
     credentials: true,
   },
 })
-export class RoomGateway implements OnGatewayInit<Namespace> {
+export class RoomGateway
+  implements OnGatewayInit<Namespace>, OnGatewayDisconnect<AuthenticatedSocket>
+{
+  private readonly logger = new Logger(RoomGateway.name);
+
   @WebSocketServer()
   private server!: Namespace;
 
@@ -68,11 +77,52 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     private readonly roomsService: RoomsService,
     private readonly gamesService: GamesService,
     private readonly drawingStateService: DrawingStateService,
+    private readonly rateLimitService: RealtimeRateLimitService,
+    private readonly roomPresenceService: RoomPresenceService,
   ) {}
 
   afterInit(server: Namespace): void {
     server.use((socket: AuthenticatedSocket, next) => {
       void this.authenticateConnection(socket, next);
+    });
+  }
+
+  handleDisconnect(client: AuthenticatedSocket): void {
+    this.rateLimitService.clearSocket(client.id);
+
+    const actor = client.data.actor;
+    const roomCode = client.data.roomCode;
+    const participantId = client.data.participantId;
+
+    if (!actor || !roomCode || !participantId) {
+      return;
+    }
+
+    this.roomPresenceService.scheduleLeave(participantId, async () => {
+      try {
+        const sockets = await this.server
+          .in(getRoomSocketChannel(roomCode))
+          .fetchSockets();
+        const reconnected = sockets.some(
+          (socket) => socket.data.participantId === participantId,
+        );
+
+        if (reconnected) {
+          return;
+        }
+
+        await this.roomsService.leave(actor, roomCode);
+      } catch (error) {
+        if (this.isParticipantNotFoundError(error)) {
+          return;
+        }
+
+        const stack = error instanceof Error ? error.stack : undefined;
+        this.logger.error(
+          `연결 종료 참가자 퇴장 처리에 실패했습니다. participantId=${participantId}`,
+          stack,
+        );
+      }
     });
   }
 
@@ -121,6 +171,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     }
 
     await client.join(getRoomSocketChannel(code));
+    this.roomPresenceService.cancelLeave(participant.id);
     client.data.roomCode = code;
     client.data.participantId = participant.id;
     client.emit(ROOM_SOCKET_EVENT.STATE, room);
@@ -132,6 +183,16 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: unknown,
   ): Promise<void> {
+    if (
+      !this.consumeRateLimit(
+        client,
+        ROOM_SOCKET_EVENT.MESSAGE,
+        REALTIME_RATE_LIMIT.GAME_MESSAGE,
+      )
+    ) {
+      return;
+    }
+
     const message = this.parseGameMessage(payload);
 
     if (!message) {
@@ -196,6 +257,16 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: unknown,
   ): Promise<void> {
+    if (
+      !this.consumeRateLimit(
+        client,
+        ROOM_SOCKET_EVENT.DRAWING_STROKE,
+        REALTIME_RATE_LIMIT.DRAWING_STROKE,
+      )
+    ) {
+      return;
+    }
+
     const stroke = this.parseDrawingStroke(payload);
 
     if (!stroke) {
@@ -236,6 +307,16 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: unknown,
   ): Promise<void> {
+    if (
+      !this.consumeRateLimit(
+        client,
+        ROOM_SOCKET_EVENT.DRAWING_CLEAR,
+        REALTIME_RATE_LIMIT.DRAWING_CLEAR,
+      )
+    ) {
+      return;
+    }
+
     const request = this.parseDrawingClear(payload);
 
     if (!request) {
@@ -277,6 +358,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
   async handleParticipantLeft(
     event: RoomParticipantLeftDomainEvent,
   ): Promise<void> {
+    this.roomPresenceService.cancelLeave(event.participantId);
     const channel = getRoomSocketChannel(event.roomCode);
 
     if (event.roomDeleted) {
@@ -534,6 +616,19 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     );
   }
 
+  private consumeRateLimit(
+    client: AuthenticatedSocket,
+    event: string,
+    rule: { limit: number; windowMs: number },
+  ): boolean {
+    if (this.rateLimitService.consume(client.id, event, rule)) {
+      return true;
+    }
+
+    this.emitError(client, REALTIME_ERROR.RATE_LIMIT_EXCEEDED);
+    return false;
+  }
+
   private emitError(
     client: AuthenticatedSocket,
     error: RealtimeErrorResponse,
@@ -564,5 +659,17 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
 
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
+  }
+
+  private isParticipantNotFoundError(error: unknown): boolean {
+    if (!(error instanceof AppException)) {
+      return false;
+    }
+
+    const response = error.getResponse();
+
+    return (
+      this.isRecord(response) && response.code === 'ROOM_PARTICIPANT_NOT_FOUND'
+    );
   }
 }

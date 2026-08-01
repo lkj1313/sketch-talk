@@ -9,6 +9,7 @@ import {
 import {
   createRoundExpiresAt,
   DRAWER_SCORE_RATIO,
+  DRAWING_PERMISSION_CACHE_TTL_MS,
   GAME_DIFFICULTY_SCORE,
 } from '@/games/constants/game.constants';
 import { GAME_ERROR } from '@/games/constants/game-error.constants';
@@ -26,6 +27,11 @@ import { PrismaService } from '@/prisma/prisma.service';
 
 @Injectable()
 export class GamesService {
+  private readonly drawingPermissions = new Map<
+    string,
+    { participantId: string; cachedUntil: number }
+  >();
+
   constructor(private readonly prisma: PrismaService) {}
 
   async getReconnectState(
@@ -106,6 +112,16 @@ export class GamesService {
     participantId: string,
     roundId: string,
   ): Promise<void> {
+    const now = Date.now();
+    const cachedPermission = this.drawingPermissions.get(roundId);
+
+    if (
+      cachedPermission?.participantId === participantId &&
+      cachedPermission.cachedUntil > now
+    ) {
+      return;
+    }
+
     const round = await this.prisma.gameRound.findFirst({
       where: {
         id: roundId,
@@ -131,7 +147,7 @@ export class GamesService {
     if (
       !round ||
       round.status !== GameRoundStatus.DRAWING ||
-      round.expiresAt <= new Date() ||
+      round.expiresAt.getTime() <= now ||
       round.roundNumber !== round.gameSession.currentRoundNumber
     ) {
       throw new AppException(GAME_ERROR.ROUND_NOT_ACTIVE);
@@ -140,6 +156,14 @@ export class GamesService {
     if (round.drawerParticipantId !== participantId) {
       throw new AppException(GAME_ERROR.DRAWING_NOT_ALLOWED);
     }
+
+    this.drawingPermissions.set(roundId, {
+      participantId,
+      cachedUntil: Math.min(
+        round.expiresAt.getTime(),
+        now + DRAWING_PERMISSION_CACHE_TTL_MS,
+      ),
+    });
   }
 
   async start(
@@ -370,6 +394,8 @@ export class GamesService {
       throw new AppException(GAME_ERROR.ROUND_NOT_ACTIVE);
     }
 
+    this.drawingPermissions.delete(round.id);
+
     await transaction.roomParticipant.update({
       where: { id: guesser.id },
       data: { score: { increment: guesserScore } },
@@ -464,6 +490,8 @@ export class GamesService {
       if (updated.count !== 1) {
         return null;
       }
+
+      this.drawingPermissions.delete(round.id);
 
       const advance = await this.advanceGame(
         transaction,

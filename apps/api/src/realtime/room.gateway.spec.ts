@@ -8,7 +8,149 @@ jest.mock('@/realtime/socket-auth.service', () => ({
   SocketAuthService: class SocketAuthService {},
 }));
 
+function allowRateLimit() {
+  return {
+    consume: jest.fn().mockReturnValue(true),
+    clearSocket: jest.fn(),
+  };
+}
+
+function ignorePresence() {
+  return {
+    scheduleLeave: jest.fn(),
+    cancelLeave: jest.fn(),
+  };
+}
+
 describe('RoomGateway', () => {
+  it('그림 이벤트 요청 제한을 초과하면 처리하지 않는다', async () => {
+    const assertCanDraw = jest.fn();
+    const client = {
+      id: 'socket-id',
+      data: {
+        roomCode: 'ABC234',
+        participantId: 'drawer-id',
+      },
+      emit: jest.fn(),
+    };
+    const gateway = new RoomGateway(
+      {} as never,
+      {} as never,
+      {} as never,
+      { assertCanDraw } as never,
+      {} as never,
+      { consume: jest.fn().mockReturnValue(false) } as never,
+      ignorePresence() as never,
+    );
+
+    await gateway.handleDrawingStroke(client as never, {});
+
+    expect(client.emit).toHaveBeenCalledWith(ROOM_SOCKET_EVENT.ERROR, {
+      code: 'REALTIME_RATE_LIMIT_EXCEEDED',
+      message: '요청을 너무 자주 보내고 있습니다.',
+    });
+    expect(assertCanDraw).not.toHaveBeenCalled();
+  });
+
+  it('소켓 연결이 종료되면 요청 제한 기록을 제거한다', () => {
+    const clearSocket = jest.fn();
+    const gateway = new RoomGateway(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { clearSocket } as never,
+      ignorePresence() as never,
+    );
+
+    gateway.handleDisconnect({ id: 'socket-id', data: {} } as never);
+
+    expect(clearSocket).toHaveBeenCalledWith('socket-id');
+  });
+
+  it('연결 종료 후 재접속하지 않으면 유예 시간이 지난 뒤 방에서 퇴장시킨다', async () => {
+    const leave = jest.fn().mockResolvedValue(undefined);
+    let scheduledLeave: (() => Promise<void>) | undefined;
+    const scheduleLeave = jest.fn(
+      (_participantId: string, callback: () => Promise<void>) => {
+        scheduledLeave = callback;
+      },
+    );
+    const server = {
+      in: jest.fn().mockReturnValue({
+        fetchSockets: jest.fn().mockResolvedValue([]),
+      }),
+    };
+    const gateway = new RoomGateway(
+      {} as never,
+      {} as never,
+      { leave } as never,
+      {} as never,
+      {} as never,
+      { clearSocket: jest.fn() } as never,
+      { scheduleLeave } as never,
+    );
+    (gateway as unknown as { server: typeof server }).server = server;
+    const actor = { type: 'USER', userId: 'user-id' };
+
+    gateway.handleDisconnect({
+      id: 'socket-id',
+      data: {
+        actor,
+        roomCode: 'ABC234',
+        participantId: 'participant-id',
+      },
+    } as never);
+    await scheduledLeave?.();
+
+    expect(scheduleLeave).toHaveBeenCalledWith(
+      'participant-id',
+      expect.any(Function),
+    );
+    expect(leave).toHaveBeenCalledWith(actor, 'ABC234');
+  });
+
+  it('다른 소켓으로 재접속한 참가자는 방에서 퇴장시키지 않는다', async () => {
+    const leave = jest.fn();
+    let scheduledLeave: (() => Promise<void>) | undefined;
+    const server = {
+      in: jest.fn().mockReturnValue({
+        fetchSockets: jest
+          .fn()
+          .mockResolvedValue([{ data: { participantId: 'participant-id' } }]),
+      }),
+    };
+    const gateway = new RoomGateway(
+      {} as never,
+      {} as never,
+      { leave } as never,
+      {} as never,
+      {} as never,
+      { clearSocket: jest.fn() } as never,
+      {
+        scheduleLeave: jest.fn(
+          (_participantId: string, callback: () => Promise<void>) => {
+            scheduledLeave = callback;
+          },
+        ),
+      } as never,
+    );
+    (gateway as unknown as { server: typeof server }).server = server;
+
+    gateway.handleDisconnect({
+      id: 'socket-id',
+      data: {
+        actor: { type: 'USER', userId: 'user-id' },
+        roomCode: 'ABC234',
+        participantId: 'participant-id',
+      },
+    } as never);
+    await scheduledLeave?.();
+
+    expect(leave).not.toHaveBeenCalled();
+  });
+
   it('현재 출제자의 그림 선을 같은 방의 다른 참가자에게 전달한다', async () => {
     const assertCanDraw = jest.fn().mockResolvedValue(undefined);
     const appendStroke = jest.fn().mockReturnValue(true);
@@ -27,6 +169,8 @@ describe('RoomGateway', () => {
       {} as never,
       { assertCanDraw } as never,
       { appendStroke } as never,
+      allowRateLimit() as never,
+      ignorePresence() as never,
     );
     const stroke: DrawingStroke = {
       roundId: '123e4567-e89b-42d3-a456-426614174000',
@@ -72,6 +216,8 @@ describe('RoomGateway', () => {
       {} as never,
       { assertCanDraw } as never,
       {} as never,
+      allowRateLimit() as never,
+      ignorePresence() as never,
     );
 
     await gateway.handleDrawingStroke(client as never, {
@@ -111,6 +257,8 @@ describe('RoomGateway', () => {
       {} as never,
       { assertCanDraw } as never,
       { clearRound } as never,
+      allowRateLimit() as never,
+      ignorePresence() as never,
     );
     (gateway as unknown as { server: typeof server }).server = server;
     const request = {
@@ -165,6 +313,8 @@ describe('RoomGateway', () => {
         getReconnectState: jest.fn().mockResolvedValue({ game }),
       } as never,
       { getSyncEvent: jest.fn().mockReturnValue(syncEvent) } as never,
+      allowRateLimit() as never,
+      ignorePresence() as never,
     );
 
     await gateway.subscribeRoom(client as never, { code: 'ABC234' });
@@ -215,6 +365,8 @@ describe('RoomGateway', () => {
       {
         getSyncEvent: jest.fn().mockReturnValue({ roundId, strokes: [] }),
       } as never,
+      allowRateLimit() as never,
+      ignorePresence() as never,
     );
 
     await gateway.subscribeRoom(client as never, { code: 'ABC234' });
@@ -250,6 +402,8 @@ describe('RoomGateway', () => {
       {} as never,
       {} as never,
       { clearRound: jest.fn() } as never,
+      allowRateLimit() as never,
+      ignorePresence() as never,
     );
     (gateway as unknown as { server: typeof server }).server = server;
     const event: RoomGameStartedDomainEvent = {
@@ -317,6 +471,8 @@ describe('RoomGateway', () => {
       {} as never,
       {} as never,
       { clearRound: jest.fn() } as never,
+      allowRateLimit() as never,
+      ignorePresence() as never,
     );
     (gateway as unknown as { server: typeof server }).server = server;
     const event: GameRoundTimedOutDomainEvent = {

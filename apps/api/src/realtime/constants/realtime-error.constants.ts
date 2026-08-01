@@ -1,4 +1,8 @@
 export const REALTIME_ERROR = {
+  RATE_LIMIT_EXCEEDED: {
+    code: 'REALTIME_RATE_LIMIT_EXCEEDED',
+    message: '요청을 너무 자주 보내고 있습니다.',
+  },
   INVALID_SUBSCRIBE_PAYLOAD: {
     code: 'REALTIME_INVALID_SUBSCRIBE_PAYLOAD',
     message: '올바른 6자리 방 코드가 필요합니다.',
