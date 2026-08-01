@@ -131,9 +131,19 @@ describe('RoomGateway', () => {
     );
   });
 
-  it('방을 구독한 중간 입장자에게 현재 라운드의 그림 기록을 전송한다', async () => {
+  it('방을 구독한 중간 입장자에게 현재 게임 상태와 그림 기록을 전송한다', async () => {
     const roundId = '123e4567-e89b-42d3-a456-426614174000';
     const syncEvent = { roundId, strokes: [] };
+    const game = {
+      gameSessionId: 'game-session-id',
+      roundId,
+      roundNumber: 1,
+      totalRounds: 2,
+      drawer: { id: 'drawer-id', nickname: '출제자' },
+      difficulty: 'EASY',
+      startedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 120_000).toISOString(),
+    };
     const client = {
       data: {
         actor: { type: 'USER', userId: 'user-id' },
@@ -152,7 +162,7 @@ describe('RoomGateway', () => {
       } as never,
       { findByCode: jest.fn().mockResolvedValue({ code: 'ABC234' }) } as never,
       {
-        findActiveDrawingRoundId: jest.fn().mockResolvedValue(roundId),
+        getReconnectState: jest.fn().mockResolvedValue({ game }),
       } as never,
       { getSyncEvent: jest.fn().mockReturnValue(syncEvent) } as never,
     );
@@ -161,8 +171,57 @@ describe('RoomGateway', () => {
 
     expect(client.join).toHaveBeenCalledWith('room:ABC234');
     expect(client.emit).toHaveBeenCalledWith(
+      ROOM_SOCKET_EVENT.GAME_STATE,
+      game,
+    );
+    expect(client.emit).toHaveBeenCalledWith(
       ROOM_SOCKET_EVENT.DRAWING_SYNC,
       syncEvent,
+    );
+  });
+
+  it('재접속한 출제자에게 현재 제시어를 다시 전송한다', async () => {
+    const roundId = '123e4567-e89b-42d3-a456-426614174000';
+    const game = {
+      roundId,
+    };
+    const wordAssignment = {
+      gameSessionId: 'game-session-id',
+      roundId,
+      answer: '고양이',
+    };
+    const client = {
+      data: {
+        actor: { type: 'USER', userId: 'user-id' },
+      },
+      join: jest.fn().mockResolvedValue(undefined),
+      leave: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+    };
+    const gateway = new RoomGateway(
+      {} as never,
+      {
+        roomParticipant: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'drawer-id' }),
+        },
+      } as never,
+      { findByCode: jest.fn().mockResolvedValue({ code: 'ABC234' }) } as never,
+      {
+        getReconnectState: jest
+          .fn()
+          .mockResolvedValue({ game, wordAssignment }),
+      } as never,
+      {
+        getSyncEvent: jest.fn().mockReturnValue({ roundId, strokes: [] }),
+      } as never,
+    );
+
+    await gateway.subscribeRoom(client as never, { code: 'ABC234' });
+
+    expect(client.emit).toHaveBeenCalledWith(
+      ROOM_SOCKET_EVENT.WORD_ASSIGNED,
+      wordAssignment,
     );
   });
 

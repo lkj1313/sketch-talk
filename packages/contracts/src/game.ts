@@ -14,6 +14,8 @@ export interface GameRoundStartedState {
   expiresAt: string;
 }
 
+export type GameReconnectState = GameRoundStartedState;
+
 export interface GameWordAssignedEvent {
   gameSessionId: string;
   roundId: string;

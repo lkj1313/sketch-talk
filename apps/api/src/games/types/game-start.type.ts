@@ -1,4 +1,5 @@
 import type {
+  GameReconnectState,
   GameRoundStartedState,
   GameWordAssignedEvent,
 } from '@sketch-talk/contracts';
@@ -17,4 +18,9 @@ export interface StartGameResult {
   game: GameRoundStartedState;
   drawerParticipantId: string;
   wordAssignment: GameWordAssignedEvent;
+}
+
+export interface GameReconnectResult {
+  game: GameReconnectState;
+  wordAssignment?: GameWordAssignedEvent;
 }
