@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AUTH_ERROR } from '@/auth/constants/auth-error.constants';
 import type { RequestActor } from '@/auth/types/request-actor.type';
 import { AppException } from '@/common/exceptions/app.exception';
+import { GAME_DOMAIN_EVENT } from '@/games/events/game.events';
 import { GamesService } from '@/games/games.service';
 import { Prisma, RoomStatus } from '@/generated/prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -244,7 +245,18 @@ export class RoomsService {
           roomId: true,
           room: {
             select: {
+              id: true,
+              code: true,
+              status: true,
               hostParticipantId: true,
+              participants: {
+                orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
+                select: {
+                  id: true,
+                  nickname: true,
+                  score: true,
+                },
+              },
               _count: {
                 select: { participants: true },
               },
@@ -257,6 +269,18 @@ export class RoomsService {
         throw new AppException(ROOM_ERROR.PARTICIPANT_NOT_FOUND);
       }
 
+      const game =
+        participant.room.status === RoomStatus.PLAYING
+          ? await this.gamesService.handleParticipantLeave(
+              transaction,
+              { id: participant.room.id, code: participant.room.code },
+              participant.id,
+              participant.room.participants.filter(
+                (item) => item.id !== participant.id,
+              ),
+            )
+          : null;
+
       if (participant.room.hostParticipantId !== participant.id) {
         await transaction.roomParticipant.delete({
           where: { id: participant.id },
@@ -267,6 +291,7 @@ export class RoomsService {
           playerCount: participant.room._count.participants - 1,
           roomDeleted: false,
           nextHost: null,
+          game,
         };
       }
 
@@ -289,6 +314,7 @@ export class RoomsService {
           playerCount: 0,
           roomDeleted: true,
           nextHost: null,
+          game,
         };
       }
 
@@ -305,6 +331,7 @@ export class RoomsService {
         playerCount: participant.room._count.participants - 1,
         roomDeleted: false,
         nextHost,
+        game,
       };
     });
 
@@ -320,6 +347,13 @@ export class RoomsService {
         roomCode: code,
         host: result.nextHost,
       });
+    }
+
+    if (result.game) {
+      await this.eventEmitter.emitAsync(
+        GAME_DOMAIN_EVENT.PARTICIPANT_LEFT,
+        result.game,
+      );
     }
   }
 

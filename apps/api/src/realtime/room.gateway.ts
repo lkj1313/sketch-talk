@@ -20,6 +20,7 @@ import { AppException } from '@/common/exceptions/app.exception';
 import { GAME_MESSAGE_MAX_LENGTH } from '@/games/constants/game.constants';
 import {
   GAME_DOMAIN_EVENT,
+  type GameParticipantLeftDomainEvent,
   type GameRoundTimedOutDomainEvent,
 } from '@/games/events/game.events';
 import { GamesService } from '@/games/games.service';
@@ -414,6 +415,41 @@ export class RoomGateway
       ROOM_SOCKET_EVENT.ROUND_TIMED_OUT,
       event.timedOut,
     );
+
+    if (event.type === 'FINISHED') {
+      this.emitToRoom(
+        event.roomCode,
+        ROOM_SOCKET_EVENT.GAME_FINISHED,
+        event.finished,
+      );
+      return;
+    }
+
+    this.emitToRoom(
+      event.roomCode,
+      ROOM_SOCKET_EVENT.ROUND_STARTED,
+      event.nextRound,
+    );
+    await this.emitToParticipant(
+      event.roomCode,
+      event.nextDrawerParticipantId,
+      ROOM_SOCKET_EVENT.WORD_ASSIGNED,
+      event.wordAssignment,
+    );
+  }
+
+  @OnEvent(GAME_DOMAIN_EVENT.PARTICIPANT_LEFT)
+  async handleGameParticipantLeft(
+    event: GameParticipantLeftDomainEvent,
+  ): Promise<void> {
+    if (event.skipped) {
+      this.drawingStateService.clearRound(event.skipped.roundId);
+      this.emitToRoom(
+        event.roomCode,
+        ROOM_SOCKET_EVENT.ROUND_SKIPPED,
+        event.skipped,
+      );
+    }
 
     if (event.type === 'FINISHED') {
       this.emitToRoom(

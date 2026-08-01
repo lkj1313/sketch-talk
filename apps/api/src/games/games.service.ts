@@ -16,6 +16,7 @@ import { GAME_ERROR } from '@/games/constants/game-error.constants';
 import type {
   AdvanceGameResult,
   ExpireGameRoundResult,
+  ParticipantLeaveGameResult,
   SubmitGameMessageResult,
 } from '@/games/types/game-message.type';
 import type {
@@ -164,6 +165,139 @@ export class GamesService {
         now + DRAWING_PERMISSION_CACHE_TTL_MS,
       ),
     });
+  }
+
+  async handleParticipantLeave(
+    transaction: Prisma.TransactionClient,
+    room: { id: string; code: string },
+    participantId: string,
+    remainingParticipants: Array<{
+      id: string;
+      nickname: string;
+      score: number;
+    }>,
+  ): Promise<ParticipantLeaveGameResult | null> {
+    const gameSession = await transaction.gameSession.findFirst({
+      where: {
+        roomId: room.id,
+        status: GameSessionStatus.PLAYING,
+      },
+      orderBy: { startedAt: 'desc' },
+      select: {
+        id: true,
+        roomId: true,
+        totalRounds: true,
+        currentRoundNumber: true,
+      },
+    });
+
+    if (!gameSession || !gameSession.roomId) {
+      return null;
+    }
+
+    const round = await transaction.gameRound.findUnique({
+      where: {
+        gameSessionId_roundNumber: {
+          gameSessionId: gameSession.id,
+          roundNumber: gameSession.currentRoundNumber,
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        answerSnapshot: true,
+        drawerParticipantId: true,
+      },
+    });
+    const endedAt = new Date();
+    const notEnoughParticipants = remainingParticipants.length < 2;
+
+    if (
+      !notEnoughParticipants &&
+      round?.drawerParticipantId !== participantId
+    ) {
+      return null;
+    }
+
+    let skipped: ParticipantLeaveGameResult['skipped'];
+
+    if (round?.status === GameRoundStatus.DRAWING) {
+      const updated = await transaction.gameRound.updateMany({
+        where: {
+          id: round.id,
+          status: GameRoundStatus.DRAWING,
+        },
+        data: {
+          status: GameRoundStatus.SKIPPED,
+          endedAt,
+        },
+      });
+
+      if (updated.count === 1) {
+        this.drawingPermissions.delete(round.id);
+        skipped = {
+          gameSessionId: gameSession.id,
+          roundId: round.id,
+          answer: round.answerSnapshot,
+          reason: notEnoughParticipants
+            ? 'NOT_ENOUGH_PARTICIPANTS'
+            : 'DRAWER_LEFT',
+        };
+      }
+    }
+
+    if (notEnoughParticipants) {
+      await transaction.gameSession.update({
+        where: { id: gameSession.id },
+        data: {
+          status: GameSessionStatus.CANCELLED,
+          endedAt,
+        },
+      });
+      await transaction.room.update({
+        where: { id: room.id },
+        data: {
+          status: RoomStatus.FINISHED,
+          endedAt,
+        },
+      });
+      const scores = [...remainingParticipants].sort(
+        (first, second) => second.score - first.score,
+      );
+
+      return {
+        roomCode: room.code,
+        type: 'FINISHED',
+        ...(skipped ? { skipped } : {}),
+        finished: {
+          gameSessionId: gameSession.id,
+          scores: scores.map((participant) => ({
+            participantId: participant.id,
+            nickname: participant.nickname,
+            score: participant.score,
+          })),
+          endedAt: endedAt.toISOString(),
+          reason: 'NOT_ENOUGH_PARTICIPANTS',
+        },
+      };
+    }
+
+    if (!skipped) {
+      return null;
+    }
+
+    const advance = await this.advanceGame(
+      transaction,
+      { ...gameSession, roomId: gameSession.roomId },
+      endedAt,
+      remainingParticipants,
+    );
+
+    return {
+      roomCode: room.code,
+      skipped,
+      ...advance,
+    };
   }
 
   async start(
@@ -525,6 +659,11 @@ export class GamesService {
       currentRoundNumber: number;
     },
     endedAt: Date,
+    participantOverride?: Array<{
+      id: string;
+      nickname: string;
+      score: number;
+    }>,
   ): Promise<AdvanceGameResult> {
     if (gameSession.currentRoundNumber >= gameSession.totalRounds) {
       await transaction.gameSession.update({
@@ -541,21 +680,26 @@ export class GamesService {
           endedAt,
         },
       });
-      const scores = await transaction.roomParticipant.findMany({
-        where: { roomId: gameSession.roomId },
-        orderBy: [{ score: 'desc' }, { joinedAt: 'asc' }],
-        select: {
-          id: true,
-          nickname: true,
-          score: true,
-        },
-      });
+      const scores =
+        participantOverride ??
+        (await transaction.roomParticipant.findMany({
+          where: { roomId: gameSession.roomId },
+          orderBy: [{ score: 'desc' }, { joinedAt: 'asc' }],
+          select: {
+            id: true,
+            nickname: true,
+            score: true,
+          },
+        }));
+      const orderedScores = [...scores].sort(
+        (first, second) => second.score - first.score,
+      );
 
       return {
         type: 'FINISHED',
         finished: {
           gameSessionId: gameSession.id,
-          scores: scores.map((score) => ({
+          scores: orderedScores.map((score) => ({
             participantId: score.id,
             nickname: score.nickname,
             score: score.score,
@@ -566,16 +710,23 @@ export class GamesService {
     }
 
     const nextRoundNumber = gameSession.currentRoundNumber + 1;
-    const participants = await transaction.roomParticipant.findMany({
-      where: { roomId: gameSession.roomId },
-      orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        nickname: true,
-      },
-    });
-    const nextDrawer =
+    const participants =
+      participantOverride ??
+      (await transaction.roomParticipant.findMany({
+        where: { roomId: gameSession.roomId },
+        orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          nickname: true,
+          score: true,
+        },
+      }));
+    const nextDrawerParticipant =
       participants[(nextRoundNumber - 1) % participants.length];
+    const nextDrawer = {
+      id: nextDrawerParticipant.id,
+      nickname: nextDrawerParticipant.nickname,
+    };
     const availableWords = await transaction.word.findMany({
       where: {
         isActive: true,

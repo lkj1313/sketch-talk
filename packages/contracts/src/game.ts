@@ -59,10 +59,18 @@ export interface GameFinishedEvent {
     score: number;
   }>;
   endedAt: string;
+  reason?: "NOT_ENOUGH_PARTICIPANTS";
 }
 
 export interface GameRoundTimedOutEvent {
   gameSessionId: string;
   roundId: string;
   answer: string;
+}
+
+export interface GameRoundSkippedEvent {
+  gameSessionId: string;
+  roundId: string;
+  answer: string;
+  reason: "DRAWER_LEFT" | "NOT_ENOUGH_PARTICIPANTS";
 }

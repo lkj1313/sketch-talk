@@ -260,6 +260,146 @@ describe('GamesService.getReconnectState', () => {
   });
 });
 
+describe('GamesService.handleParticipantLeave', () => {
+  const gameSessionFindFirst = jest.fn();
+  const gameSessionUpdate = jest.fn();
+  const gameRoundFindUnique = jest.fn();
+  const gameRoundUpdateMany = jest.fn();
+  const gameRoundCreate = jest.fn();
+  const roomUpdate = jest.fn();
+  const wordFindMany = jest.fn();
+  const wordUpdate = jest.fn();
+  const transaction = {
+    gameSession: {
+      findFirst: gameSessionFindFirst,
+      update: gameSessionUpdate,
+    },
+    gameRound: {
+      findUnique: gameRoundFindUnique,
+      updateMany: gameRoundUpdateMany,
+      create: gameRoundCreate,
+    },
+    room: { update: roomUpdate },
+    word: { findMany: wordFindMany, update: wordUpdate },
+    roomParticipant: { findMany: jest.fn() },
+  };
+  const service = new GamesService({} as never);
+  const remainingParticipants = [
+    { id: 'participant-2', nickname: '참가자2', score: 50 },
+    { id: 'participant-3', nickname: '참가자3', score: 100 },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    gameSessionFindFirst.mockResolvedValue({
+      id: 'game-session-id',
+      roomId: 'room-id',
+      totalRounds: 3,
+      currentRoundNumber: 1,
+    });
+    gameRoundFindUnique.mockResolvedValue({
+      id: 'round-id',
+      status: 'DRAWING',
+      answerSnapshot: '고양이',
+      drawerParticipantId: 'leaving-drawer-id',
+    });
+    gameRoundUpdateMany.mockResolvedValue({ count: 1 });
+    wordFindMany.mockResolvedValue([
+      {
+        id: 'next-word-id',
+        answer: '강아지',
+        difficulty: WordDifficulty.EASY,
+      },
+    ]);
+    gameRoundCreate.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'next-round-id',
+        startedAt: data.startedAt,
+        expiresAt: data.expiresAt,
+      }),
+    );
+    gameSessionUpdate.mockResolvedValue({});
+    roomUpdate.mockResolvedValue({});
+    wordUpdate.mockResolvedValue({});
+  });
+
+  it('현재 출제자가 나가면 라운드를 건너뛰고 다음 라운드를 시작한다', async () => {
+    const result = await service.handleParticipantLeave(
+      transaction as never,
+      { id: 'room-id', code: 'ABC234' },
+      'leaving-drawer-id',
+      remainingParticipants,
+    );
+
+    expect(gameRoundUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'round-id', status: 'DRAWING' },
+      data: { status: 'SKIPPED', endedAt: expect.any(Date) },
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        roomCode: 'ABC234',
+        type: 'NEXT',
+        skipped: {
+          gameSessionId: 'game-session-id',
+          roundId: 'round-id',
+          answer: '고양이',
+          reason: 'DRAWER_LEFT',
+        },
+        nextRound: expect.objectContaining({
+          roundNumber: 2,
+          drawer: { id: 'participant-3', nickname: '참가자3' },
+        }),
+      }),
+    );
+  });
+
+  it('남은 참가자가 두 명 미만이면 진행 중인 게임을 종료한다', async () => {
+    const result = await service.handleParticipantLeave(
+      transaction as never,
+      { id: 'room-id', code: 'ABC234' },
+      'leaving-drawer-id',
+      [remainingParticipants[0]],
+    );
+
+    expect(gameSessionUpdate).toHaveBeenCalledWith({
+      where: { id: 'game-session-id' },
+      data: { status: 'CANCELLED', endedAt: expect.any(Date) },
+    });
+    expect(roomUpdate).toHaveBeenCalledWith({
+      where: { id: 'room-id' },
+      data: { status: 'FINISHED', endedAt: expect.any(Date) },
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        type: 'FINISHED',
+        finished: expect.objectContaining({
+          reason: 'NOT_ENOUGH_PARTICIPANTS',
+          scores: [
+            {
+              participantId: 'participant-2',
+              nickname: '참가자2',
+              score: 50,
+            },
+          ],
+        }),
+      }),
+    );
+    expect(gameRoundCreate).not.toHaveBeenCalled();
+  });
+
+  it('출제자가 아닌 참가자가 나가고 두 명 이상 남으면 게임을 계속한다', async () => {
+    const result = await service.handleParticipantLeave(
+      transaction as never,
+      { id: 'room-id', code: 'ABC234' },
+      'participant-2',
+      remainingParticipants,
+    );
+
+    expect(result).toBeNull();
+    expect(gameRoundUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('GamesService.submitMessage', () => {
   const roomParticipantFindFirst = jest.fn();
   const roomParticipantFindMany = jest.fn();
