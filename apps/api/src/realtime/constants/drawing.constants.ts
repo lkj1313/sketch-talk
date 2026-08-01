@@ -4,3 +4,4 @@ export const DRAWING_WIDTH_MIN = 1;
 export const DRAWING_WIDTH_MAX = 50;
 export const DRAWING_POINTS_MAX_LENGTH = 100;
 export const DRAWING_COLOR_MAX_LENGTH = 20;
+export const DRAWING_HISTORY_MAX_POINTS = 20_000;

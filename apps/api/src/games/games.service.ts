@@ -27,6 +27,23 @@ import { PrismaService } from '@/prisma/prisma.service';
 export class GamesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findActiveDrawingRoundId(roomCode: string): Promise<string | null> {
+    const round = await this.prisma.gameRound.findFirst({
+      where: {
+        status: GameRoundStatus.DRAWING,
+        expiresAt: { gt: new Date() },
+        gameSession: {
+          status: GameSessionStatus.PLAYING,
+          room: { code: roomCode },
+        },
+      },
+      orderBy: { roundNumber: 'desc' },
+      select: { id: true },
+    });
+
+    return round?.id ?? null;
+  }
+
   async assertCanDraw(
     roomCode: string,
     participantId: string,

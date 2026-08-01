@@ -8,6 +8,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import type {
+  DrawingClearRequest,
   DrawingPoint,
   DrawingStroke,
   RealtimeErrorResponse,
@@ -37,6 +38,7 @@ import {
 } from '@/realtime/constants/realtime.constants';
 import { REALTIME_ERROR } from '@/realtime/constants/realtime-error.constants';
 import { SocketAuthService } from '@/realtime/socket-auth.service';
+import { DrawingStateService } from '@/realtime/drawing-state.service';
 import type { AuthenticatedSocket } from '@/realtime/types/authenticated-socket.type';
 import {
   ROOM_DOMAIN_EVENT,
@@ -65,6 +67,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     private readonly prisma: PrismaService,
     private readonly roomsService: RoomsService,
     private readonly gamesService: GamesService,
+    private readonly drawingStateService: DrawingStateService,
   ) {}
 
   afterInit(server: Namespace): void {
@@ -121,6 +124,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     client.data.roomCode = code;
     client.data.participantId = participant.id;
     client.emit(ROOM_SOCKET_EVENT.STATE, room);
+    await this.emitDrawingSync(client, code);
   }
 
   @SubscribeMessage(ROOM_SOCKET_EVENT.MESSAGE)
@@ -160,6 +164,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
         ROOM_SOCKET_EVENT.CORRECT_ANSWER,
         result.correctAnswer,
       );
+      this.drawingStateService.clearRound(result.correctAnswer.roundId);
 
       if (result.type === 'FINISHED') {
         this.emitToRoom(
@@ -212,9 +217,48 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
         participantId,
         stroke.roundId,
       );
+
+      if (!this.drawingStateService.appendStroke(stroke)) {
+        this.emitError(client, REALTIME_ERROR.DRAWING_HISTORY_LIMIT_EXCEEDED);
+        return;
+      }
+
       client
         .to(getRoomSocketChannel(roomCode))
         .emit(ROOM_SOCKET_EVENT.DRAWING_STROKE_ADDED, stroke);
+    } catch (error) {
+      this.emitError(client, this.resolveConnectionError(error));
+    }
+  }
+
+  @SubscribeMessage(ROOM_SOCKET_EVENT.DRAWING_CLEAR)
+  async handleDrawingClear(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: unknown,
+  ): Promise<void> {
+    const request = this.parseDrawingClear(payload);
+
+    if (!request) {
+      this.emitError(client, REALTIME_ERROR.INVALID_DRAWING_CLEAR);
+      return;
+    }
+
+    const roomCode = client.data.roomCode;
+    const participantId = client.data.participantId;
+
+    if (!roomCode || !participantId) {
+      this.emitError(client, REALTIME_ERROR.ROOM_SUBSCRIPTION_REQUIRED);
+      return;
+    }
+
+    try {
+      await this.gamesService.assertCanDraw(
+        roomCode,
+        participantId,
+        request.roundId,
+      );
+      this.drawingStateService.clearRound(request.roundId);
+      this.emitToRoom(roomCode, ROOM_SOCKET_EVENT.DRAWING_CLEARED, request);
     } catch (error) {
       this.emitError(client, this.resolveConnectionError(error));
     }
@@ -263,6 +307,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
   @OnEvent(ROOM_DOMAIN_EVENT.GAME_STARTED)
   async handleGameStarted(event: RoomGameStartedDomainEvent): Promise<void> {
     const { drawerParticipantId, wordAssignment, ...publicEvent } = event;
+    this.drawingStateService.clearRound(event.game.roundId);
     this.emitToRoom(
       event.roomCode,
       ROOM_SOCKET_EVENT.GAME_STARTED,
@@ -281,6 +326,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
   async handleRoundTimedOut(
     event: GameRoundTimedOutDomainEvent,
   ): Promise<void> {
+    this.drawingStateService.clearRound(event.timedOut.roundId);
     this.emitToRoom(
       event.roomCode,
       ROOM_SOCKET_EVENT.ROUND_TIMED_OUT,
@@ -426,6 +472,34 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     }
 
     return { x: value.x, y: value.y };
+  }
+
+  private parseDrawingClear(payload: unknown): DrawingClearRequest | undefined {
+    if (
+      !this.isRecord(payload) ||
+      typeof payload.roundId !== 'string' ||
+      !this.isUuid(payload.roundId)
+    ) {
+      return undefined;
+    }
+
+    return { roundId: payload.roundId };
+  }
+
+  private async emitDrawingSync(
+    client: AuthenticatedSocket,
+    roomCode: string,
+  ): Promise<void> {
+    const roundId = await this.gamesService.findActiveDrawingRoundId(roomCode);
+
+    if (!roundId) {
+      return;
+    }
+
+    client.emit(
+      ROOM_SOCKET_EVENT.DRAWING_SYNC,
+      this.drawingStateService.getSyncEvent(roundId),
+    );
   }
 
   private isNumberInRange(
