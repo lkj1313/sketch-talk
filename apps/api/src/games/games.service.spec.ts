@@ -190,6 +190,68 @@ describe('GamesService.assertCanDraw', () => {
   });
 });
 
+describe('GamesService.getReconnectState', () => {
+  const gameRoundFindFirst = jest.fn();
+  const service = new GamesService({
+    gameRound: { findFirst: gameRoundFindFirst },
+  } as never);
+  const startedAt = new Date();
+  const expiresAt = new Date(Date.now() + 120_000);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    gameRoundFindFirst.mockResolvedValue({
+      id: 'round-id',
+      roundNumber: 1,
+      difficultySnapshot: WordDifficulty.EASY,
+      startedAt,
+      expiresAt,
+      answerSnapshot: '고양이',
+      drawerParticipantId: 'drawer-id',
+      drawerParticipant: {
+        id: 'drawer-id',
+        nickname: '출제자',
+      },
+      gameSession: {
+        id: 'game-session-id',
+        totalRounds: 2,
+        currentRoundNumber: 1,
+      },
+    });
+  });
+
+  it('일반 참가자에게 현재 라운드의 공개 상태를 반환한다', async () => {
+    const result = await service.getReconnectState('ABC234', 'participant-id');
+
+    expect(result).toEqual({
+      game: {
+        gameSessionId: 'game-session-id',
+        roundId: 'round-id',
+        roundNumber: 1,
+        totalRounds: 2,
+        drawer: { id: 'drawer-id', nickname: '출제자' },
+        difficulty: WordDifficulty.EASY,
+        startedAt: startedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+      },
+    });
+  });
+
+  it('재접속한 출제자에게만 현재 제시어를 함께 반환한다', async () => {
+    const result = await service.getReconnectState('ABC234', 'drawer-id');
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        wordAssignment: {
+          gameSessionId: 'game-session-id',
+          roundId: 'round-id',
+          answer: '고양이',
+        },
+      }),
+    );
+  });
+});
+
 describe('GamesService.submitMessage', () => {
   const roomParticipantFindFirst = jest.fn();
   const roomParticipantFindMany = jest.fn();

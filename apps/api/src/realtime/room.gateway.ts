@@ -124,7 +124,7 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     client.data.roomCode = code;
     client.data.participantId = participant.id;
     client.emit(ROOM_SOCKET_EVENT.STATE, room);
-    await this.emitDrawingSync(client, code);
+    await this.emitGameReconnectState(client, code, participant.id);
   }
 
   @SubscribeMessage(ROOM_SOCKET_EVENT.MESSAGE)
@@ -486,19 +486,32 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     return { roundId: payload.roundId };
   }
 
-  private async emitDrawingSync(
+  private async emitGameReconnectState(
     client: AuthenticatedSocket,
     roomCode: string,
+    participantId: string,
   ): Promise<void> {
-    const roundId = await this.gamesService.findActiveDrawingRoundId(roomCode);
+    const reconnectState = await this.gamesService.getReconnectState(
+      roomCode,
+      participantId,
+    );
 
-    if (!roundId) {
+    if (!reconnectState) {
       return;
+    }
+
+    client.emit(ROOM_SOCKET_EVENT.GAME_STATE, reconnectState.game);
+
+    if (reconnectState.wordAssignment) {
+      client.emit(
+        ROOM_SOCKET_EVENT.WORD_ASSIGNED,
+        reconnectState.wordAssignment,
+      );
     }
 
     client.emit(
       ROOM_SOCKET_EVENT.DRAWING_SYNC,
-      this.drawingStateService.getSyncEvent(roundId),
+      this.drawingStateService.getSyncEvent(reconnectState.game.roundId),
     );
   }
 

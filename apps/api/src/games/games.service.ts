@@ -18,6 +18,7 @@ import type {
   SubmitGameMessageResult,
 } from '@/games/types/game-message.type';
 import type {
+  GameReconnectResult,
   StartGameResult,
   StartGameRoom,
 } from '@/games/types/game-start.type';
@@ -27,21 +28,77 @@ import { PrismaService } from '@/prisma/prisma.service';
 export class GamesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findActiveDrawingRoundId(roomCode: string): Promise<string | null> {
+  async getReconnectState(
+    roomCode: string,
+    participantId: string,
+  ): Promise<GameReconnectResult | null> {
     const round = await this.prisma.gameRound.findFirst({
       where: {
         status: GameRoundStatus.DRAWING,
         expiresAt: { gt: new Date() },
         gameSession: {
           status: GameSessionStatus.PLAYING,
-          room: { code: roomCode },
+          room: {
+            code: roomCode,
+            participants: { some: { id: participantId } },
+          },
         },
       },
       orderBy: { roundNumber: 'desc' },
-      select: { id: true },
+      select: {
+        id: true,
+        roundNumber: true,
+        difficultySnapshot: true,
+        startedAt: true,
+        expiresAt: true,
+        answerSnapshot: true,
+        drawerParticipantId: true,
+        drawerParticipant: {
+          select: {
+            id: true,
+            nickname: true,
+          },
+        },
+        gameSession: {
+          select: {
+            id: true,
+            totalRounds: true,
+            currentRoundNumber: true,
+          },
+        },
+      },
     });
 
-    return round?.id ?? null;
+    if (
+      !round ||
+      !round.drawerParticipant ||
+      round.roundNumber !== round.gameSession.currentRoundNumber
+    ) {
+      return null;
+    }
+
+    const result: GameReconnectResult = {
+      game: {
+        gameSessionId: round.gameSession.id,
+        roundId: round.id,
+        roundNumber: round.roundNumber,
+        totalRounds: round.gameSession.totalRounds,
+        drawer: round.drawerParticipant,
+        difficulty: round.difficultySnapshot,
+        startedAt: round.startedAt.toISOString(),
+        expiresAt: round.expiresAt.toISOString(),
+      },
+    };
+
+    if (round.drawerParticipantId === participantId) {
+      result.wordAssignment = {
+        gameSessionId: round.gameSession.id,
+        roundId: round.id,
+        answer: round.answerSnapshot,
+      };
+    }
+
+    return result;
   }
 
   async assertCanDraw(

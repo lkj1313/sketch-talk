@@ -25,6 +25,7 @@ export type {
   GameCorrectAnswerEvent,
   GameFinishedEvent,
   GameMessageRequest,
+  GameReconnectState,
   GameRoundStartedState,
   GameRoundTimedOutEvent,
   GameWordAssignedEvent,
