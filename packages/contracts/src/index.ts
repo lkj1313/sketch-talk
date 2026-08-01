@@ -14,6 +14,13 @@ export type {
 } from "./api-response.js";
 export type { GuestSessionResponse } from "./guest-session.js";
 export type {
+  DrawingClearRequest,
+  DrawingPoint,
+  DrawingStroke,
+  DrawingSyncEvent,
+  DrawingTool,
+} from "./drawing.js";
+export type {
   GameChatMessageEvent,
   GameCorrectAnswerEvent,
   GameFinishedEvent,

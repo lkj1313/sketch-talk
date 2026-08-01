@@ -1,0 +1,6 @@
+export const DRAWING_COORDINATE_MIN = 0;
+export const DRAWING_COORDINATE_MAX = 1;
+export const DRAWING_WIDTH_MIN = 1;
+export const DRAWING_WIDTH_MAX = 50;
+export const DRAWING_POINTS_MAX_LENGTH = 100;
+export const DRAWING_COLOR_MAX_LENGTH = 20;
