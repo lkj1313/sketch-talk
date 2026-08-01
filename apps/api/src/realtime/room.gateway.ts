@@ -3,6 +3,7 @@ import {
   ConnectedSocket,
   MessageBody,
   OnGatewayInit,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -37,8 +38,10 @@ import {
   ROOM_SOCKET_PATH,
 } from '@/realtime/constants/realtime.constants';
 import { REALTIME_ERROR } from '@/realtime/constants/realtime-error.constants';
+import { REALTIME_RATE_LIMIT } from '@/realtime/constants/realtime-rate-limit.constants';
 import { SocketAuthService } from '@/realtime/socket-auth.service';
 import { DrawingStateService } from '@/realtime/drawing-state.service';
+import { RealtimeRateLimitService } from '@/realtime/realtime-rate-limit.service';
 import type { AuthenticatedSocket } from '@/realtime/types/authenticated-socket.type';
 import {
   ROOM_DOMAIN_EVENT,
@@ -58,7 +61,9 @@ import { RoomsService } from '@/rooms/rooms.service';
     credentials: true,
   },
 })
-export class RoomGateway implements OnGatewayInit<Namespace> {
+export class RoomGateway
+  implements OnGatewayInit<Namespace>, OnGatewayDisconnect<AuthenticatedSocket>
+{
   @WebSocketServer()
   private server!: Namespace;
 
@@ -68,12 +73,17 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     private readonly roomsService: RoomsService,
     private readonly gamesService: GamesService,
     private readonly drawingStateService: DrawingStateService,
+    private readonly rateLimitService: RealtimeRateLimitService,
   ) {}
 
   afterInit(server: Namespace): void {
     server.use((socket: AuthenticatedSocket, next) => {
       void this.authenticateConnection(socket, next);
     });
+  }
+
+  handleDisconnect(client: AuthenticatedSocket): void {
+    this.rateLimitService.clearSocket(client.id);
   }
 
   @SubscribeMessage(ROOM_SOCKET_EVENT.SUBSCRIBE)
@@ -132,6 +142,16 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: unknown,
   ): Promise<void> {
+    if (
+      !this.consumeRateLimit(
+        client,
+        ROOM_SOCKET_EVENT.MESSAGE,
+        REALTIME_RATE_LIMIT.GAME_MESSAGE,
+      )
+    ) {
+      return;
+    }
+
     const message = this.parseGameMessage(payload);
 
     if (!message) {
@@ -196,6 +216,16 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: unknown,
   ): Promise<void> {
+    if (
+      !this.consumeRateLimit(
+        client,
+        ROOM_SOCKET_EVENT.DRAWING_STROKE,
+        REALTIME_RATE_LIMIT.DRAWING_STROKE,
+      )
+    ) {
+      return;
+    }
+
     const stroke = this.parseDrawingStroke(payload);
 
     if (!stroke) {
@@ -236,6 +266,16 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: unknown,
   ): Promise<void> {
+    if (
+      !this.consumeRateLimit(
+        client,
+        ROOM_SOCKET_EVENT.DRAWING_CLEAR,
+        REALTIME_RATE_LIMIT.DRAWING_CLEAR,
+      )
+    ) {
+      return;
+    }
+
     const request = this.parseDrawingClear(payload);
 
     if (!request) {
@@ -532,6 +572,19 @@ export class RoomGateway implements OnGatewayInit<Namespace> {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       value,
     );
+  }
+
+  private consumeRateLimit(
+    client: AuthenticatedSocket,
+    event: string,
+    rule: { limit: number; windowMs: number },
+  ): boolean {
+    if (this.rateLimitService.consume(client.id, event, rule)) {
+      return true;
+    }
+
+    this.emitError(client, REALTIME_ERROR.RATE_LIMIT_EXCEEDED);
+    return false;
   }
 
   private emitError(

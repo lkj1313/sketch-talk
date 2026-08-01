@@ -132,12 +132,13 @@ describe('GamesService', () => {
 
 describe('GamesService.assertCanDraw', () => {
   const gameRoundFindFirst = jest.fn();
-  const service = new GamesService({
-    gameRound: { findFirst: gameRoundFindFirst },
-  } as never);
+  let service: GamesService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    service = new GamesService({
+      gameRound: { findFirst: gameRoundFindFirst },
+    } as never);
     gameRoundFindFirst.mockResolvedValue({
       roundNumber: 1,
       status: 'DRAWING',
@@ -187,6 +188,13 @@ describe('GamesService.assertCanDraw', () => {
       code: 'GAME_DRAWING_NOT_ALLOWED',
       message: '현재 출제자만 그림을 그릴 수 있습니다.',
     });
+  });
+
+  it('동일 출제자의 반복 요청은 짧은 시간 동안 권한 조회 결과를 재사용한다', async () => {
+    await service.assertCanDraw('ABC234', 'drawer-id', 'round-id');
+    await service.assertCanDraw('ABC234', 'drawer-id', 'round-id');
+
+    expect(gameRoundFindFirst).toHaveBeenCalledTimes(1);
   });
 });
 
