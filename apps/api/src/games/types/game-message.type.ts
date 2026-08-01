@@ -3,6 +3,7 @@ import type {
   GameCorrectAnswerEvent,
   GameFinishedEvent,
   GameRoundStartedState,
+  GameRoundSkippedEvent,
   GameRoundTimedOutEvent,
   GameWordAssignedEvent,
 } from '@sketch-talk/contracts';
@@ -43,3 +44,15 @@ export type ExpireGameRoundResult =
       timedOut: GameRoundTimedOutEvent;
     } & AdvanceGameResult)
   | null;
+
+export type ParticipantLeaveGameResult =
+  | ({
+      roomCode: string;
+      skipped: GameRoundSkippedEvent;
+    } & AdvanceGameResult)
+  | {
+      roomCode: string;
+      skipped?: GameRoundSkippedEvent;
+      type: 'FINISHED';
+      finished: GameFinishedEvent;
+    };

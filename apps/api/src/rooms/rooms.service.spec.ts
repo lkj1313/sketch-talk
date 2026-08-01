@@ -3,6 +3,7 @@ import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { RoomStatus, RoomVisibility } from '@/generated/prisma/client';
 import { AppException } from '@/common/exceptions/app.exception';
 import type { GamesService } from '@/games/games.service';
+import { GAME_DOMAIN_EVENT } from '@/games/events/game.events';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CreateRoomDto } from '@/rooms/dto/create-room.dto';
 import { RoomsService } from '@/rooms/rooms.service';
@@ -28,8 +29,10 @@ describe('RoomsService', () => {
     emitAsync: eventEmitAsync,
   } as unknown as EventEmitter2;
   const gamesStart = jest.fn();
+  const gamesHandleParticipantLeave = jest.fn();
   const gamesService = {
     start: gamesStart,
+    handleParticipantLeave: gamesHandleParticipantLeave,
   } as unknown as GamesService;
   const prisma = {
     roomParticipant: {
@@ -131,6 +134,7 @@ describe('RoomsService', () => {
         answer: '고양이',
       },
     });
+    gamesHandleParticipantLeave.mockResolvedValue(null);
     transaction.mockImplementation(
       async (callback: (transaction: PrismaService) => Promise<unknown>) =>
         callback(prisma),
@@ -748,6 +752,48 @@ describe('RoomsService', () => {
     });
     expect(roomUpdate).not.toHaveBeenCalled();
     expect(roomDelete).not.toHaveBeenCalled();
+  });
+
+  it('게임 중 참가자가 나가면 게임 퇴장 처리 결과를 실시간 이벤트로 발행한다', async () => {
+    const gameResult = {
+      roomCode: 'ABC234',
+      type: 'FINISHED',
+      finished: {
+        gameSessionId: 'game-session-id',
+        scores: [],
+        endedAt: new Date().toISOString(),
+        reason: 'NOT_ENOUGH_PARTICIPANTS',
+      },
+    };
+    roomParticipantFindFirst.mockResolvedValue({
+      id: 'participant-id',
+      roomId: 'room-id',
+      room: {
+        id: 'room-id',
+        code: 'ABC234',
+        status: RoomStatus.PLAYING,
+        hostParticipantId: 'host-participant-id',
+        participants: [
+          { id: 'host-participant-id', nickname: '방장', score: 0 },
+          { id: 'participant-id', nickname: '참가자', score: 0 },
+        ],
+        _count: { participants: 2 },
+      },
+    });
+    gamesHandleParticipantLeave.mockResolvedValue(gameResult);
+
+    await roomsService.leave({ type: 'USER', userId: 'user-id' }, 'ABC234');
+
+    expect(gamesHandleParticipantLeave).toHaveBeenCalledWith(
+      prisma,
+      { id: 'room-id', code: 'ABC234' },
+      'participant-id',
+      [{ id: 'host-participant-id', nickname: '방장', score: 0 }],
+    );
+    expect(eventEmitAsync).toHaveBeenCalledWith(
+      GAME_DOMAIN_EVENT.PARTICIPANT_LEFT,
+      gameResult,
+    );
   });
 
   it('방장이 나가면 가장 먼저 들어온 참가자에게 방장을 넘긴다', async () => {

@@ -1,5 +1,8 @@
 import type { RoomGameStartedDomainEvent } from '@/rooms/events/room.events';
-import type { GameRoundTimedOutDomainEvent } from '@/games/events/game.events';
+import type {
+  GameParticipantLeftDomainEvent,
+  GameRoundTimedOutDomainEvent,
+} from '@/games/events/game.events';
 import type { DrawingStroke } from '@sketch-talk/contracts';
 import { RoomGateway } from '@/realtime/room.gateway';
 import { ROOM_SOCKET_EVENT } from '@/realtime/constants/realtime.constants';
@@ -518,6 +521,75 @@ describe('RoomGateway', () => {
     expect(participantEmit).not.toHaveBeenCalledWith(
       ROOM_SOCKET_EVENT.WORD_ASSIGNED,
       expect.anything(),
+    );
+  });
+
+  it('출제자가 나가면 건너뛴 라운드를 알리고 다음 출제자에게 제시어를 보낸다', async () => {
+    const roomEmit = jest.fn();
+    const nextDrawerEmit = jest.fn();
+    const clearRound = jest.fn();
+    const server = {
+      to: jest.fn().mockReturnValue({ emit: roomEmit }),
+      in: jest.fn().mockReturnValue({
+        fetchSockets: jest.fn().mockResolvedValue([
+          {
+            data: { participantId: 'next-drawer-id' },
+            emit: nextDrawerEmit,
+          },
+        ]),
+      }),
+    };
+    const gateway = new RoomGateway(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { clearRound } as never,
+      allowRateLimit() as never,
+      ignorePresence() as never,
+    );
+    (gateway as unknown as { server: typeof server }).server = server;
+    const event: GameParticipantLeftDomainEvent = {
+      roomCode: 'ABC234',
+      type: 'NEXT',
+      skipped: {
+        gameSessionId: 'game-session-id',
+        roundId: 'round-id',
+        answer: '고양이',
+        reason: 'DRAWER_LEFT',
+      },
+      nextRound: {
+        gameSessionId: 'game-session-id',
+        roundId: 'next-round-id',
+        roundNumber: 2,
+        totalRounds: 3,
+        drawer: { id: 'next-drawer-id', nickname: '다음 출제자' },
+        difficulty: 'EASY',
+        startedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 120_000).toISOString(),
+      },
+      nextDrawerParticipantId: 'next-drawer-id',
+      wordAssignment: {
+        gameSessionId: 'game-session-id',
+        roundId: 'next-round-id',
+        answer: '강아지',
+      },
+    };
+
+    await gateway.handleGameParticipantLeft(event);
+
+    expect(clearRound).toHaveBeenCalledWith('round-id');
+    expect(roomEmit).toHaveBeenCalledWith(
+      ROOM_SOCKET_EVENT.ROUND_SKIPPED,
+      event.skipped,
+    );
+    expect(roomEmit).toHaveBeenCalledWith(
+      ROOM_SOCKET_EVENT.ROUND_STARTED,
+      event.nextRound,
+    );
+    expect(nextDrawerEmit).toHaveBeenCalledWith(
+      ROOM_SOCKET_EVENT.WORD_ASSIGNED,
+      event.wordAssignment,
     );
   });
 });
