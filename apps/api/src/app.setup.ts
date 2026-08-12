@@ -11,6 +11,10 @@ import { ResponseInterceptor } from '@/common/interceptors/response.interceptor'
 
 export function configureApp(app: INestApplication): void {
   app.use(cookieParser());
+  app.enableCors({
+    origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+    credentials: true,
+  });
   app.setGlobalPrefix('api');
   app.enableVersioning({
     type: VersioningType.URI,
