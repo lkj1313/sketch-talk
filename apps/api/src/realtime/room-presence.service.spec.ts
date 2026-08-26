@@ -30,4 +30,18 @@ describe('RoomPresenceService', () => {
 
     expect(leave).not.toHaveBeenCalled();
   });
+
+  it('애플리케이션이 종료되면 예약된 퇴장 처리를 모두 취소한다', async () => {
+    const service = new RoomPresenceService();
+    const firstLeave = jest.fn().mockResolvedValue(undefined);
+    const secondLeave = jest.fn().mockResolvedValue(undefined);
+    service.scheduleLeave('first-participant-id', firstLeave);
+    service.scheduleLeave('second-participant-id', secondLeave);
+
+    service.onModuleDestroy();
+    await jest.advanceTimersByTimeAsync(ROOM_RECONNECT_GRACE_PERIOD_MS);
+
+    expect(firstLeave).not.toHaveBeenCalled();
+    expect(secondLeave).not.toHaveBeenCalled();
+  });
 });

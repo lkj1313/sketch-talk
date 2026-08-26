@@ -154,6 +154,41 @@ export class RoomsService {
     });
   }
 
+  async findCurrentParticipant(
+    actor: RequestActor,
+    code: string,
+  ): Promise<RoomParticipantResponseDto | null> {
+    const room = await this.prisma.room.findUnique({
+      where: { code },
+      select: {
+        hostParticipantId: true,
+        participants: {
+          where:
+            actor.type === 'USER'
+              ? { userId: actor.userId }
+              : { guestSessionId: actor.guestSessionId },
+          take: 1,
+          select: {
+            id: true,
+            nickname: true,
+            score: true,
+            isReady: true,
+          },
+        },
+      },
+    });
+
+    if (!room) {
+      throw new AppException(ROOM_ERROR.NOT_FOUND);
+    }
+
+    const participant = room.participants[0];
+
+    return participant
+      ? new RoomParticipantResponseDto(participant, room.hostParticipantId)
+      : null;
+  }
+
   async join(
     actor: RequestActor,
     code: string,

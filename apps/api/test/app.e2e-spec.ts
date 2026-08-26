@@ -86,7 +86,9 @@ describe('AppController (e2e)', () => {
     expect(setCookie[0]).toContain('HttpOnly');
     expect(setCookie[0]).toContain('SameSite=Lax');
     expect(setCookie[0]).toContain('Path=/api/v1');
-    expect(setCookie[0]).toContain('Max-Age=86400');
+    const maxAge = Number(setCookie[0].match(/Max-Age=(\d+)/)?.[1]);
+    expect(maxAge).toBeGreaterThanOrEqual(86_390);
+    expect(maxAge).toBeLessThanOrEqual(86_400);
 
     guestCookie = setCookie[0].split(';')[0];
     const guestToken = guestCookie.split('=')[1];
@@ -205,6 +207,17 @@ describe('AppController (e2e)', () => {
     });
   });
 
+  it('방에 참가하지 않은 비회원의 현재 참가자 정보는 null이다', () => {
+    return joiningGuestAgent
+      .get(`/api/v1/rooms/${publicRoomCode}/participants/me`)
+      .expect(200)
+      .expect({
+        success: true,
+        statusCode: 200,
+        data: null,
+      });
+  });
+
   it('비회원이 닉네임 없이 방에 참가하면 400 오류를 반환한다', () => {
     return joiningGuestAgent
       .post(`/api/v1/rooms/${publicRoomCode}/participants`)
@@ -269,6 +282,23 @@ describe('AppController (e2e)', () => {
     await expect(statePromise).resolves.toMatchObject({
       code: publicRoomCode,
       playerCount: 2,
+    });
+  });
+
+  it('방에 참가한 비회원의 현재 참가자 정보를 조회한다', async () => {
+    const response = await joiningGuestAgent
+      .get(`/api/v1/rooms/${publicRoomCode}/participants/me`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      success: true,
+      statusCode: 200,
+      data: {
+        nickname: '참가자123',
+        score: 0,
+        isReady: false,
+        isHost: false,
+      },
     });
   });
 

@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, type OnModuleDestroy } from '@nestjs/common';
 import { ROOM_RECONNECT_GRACE_PERIOD_MS } from '@/realtime/constants/room-presence.constants';
 
 @Injectable()
-export class RoomPresenceService {
+export class RoomPresenceService implements OnModuleDestroy {
   private readonly leaveTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -28,5 +28,13 @@ export class RoomPresenceService {
 
     clearTimeout(timer);
     this.leaveTimers.delete(participantId);
+  }
+
+  onModuleDestroy(): void {
+    for (const timer of this.leaveTimers.values()) {
+      clearTimeout(timer);
+    }
+
+    this.leaveTimers.clear();
   }
 }

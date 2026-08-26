@@ -342,6 +342,88 @@ describe('RoomsService', () => {
     });
   });
 
+  it('현재 비회원 참가자와 방장 여부를 반환한다', async () => {
+    roomFindUnique.mockResolvedValue({
+      hostParticipantId: 'guest-participant-id',
+      participants: [
+        {
+          id: 'guest-participant-id',
+          nickname: '게스트123',
+          score: 0,
+          isReady: false,
+        },
+      ],
+    });
+
+    await expect(
+      roomsService.findCurrentParticipant(
+        { type: 'GUEST', guestSessionId: 'guest-session-id' },
+        'ABC234',
+      ),
+    ).resolves.toEqual({
+      id: 'guest-participant-id',
+      nickname: '게스트123',
+      score: 0,
+      isReady: false,
+      isHost: true,
+    });
+    expect(roomFindUnique).toHaveBeenCalledWith({
+      where: { code: 'ABC234' },
+      select: {
+        hostParticipantId: true,
+        participants: {
+          where: { guestSessionId: 'guest-session-id' },
+          take: 1,
+          select: {
+            id: true,
+            nickname: true,
+            score: true,
+            isReady: true,
+          },
+        },
+      },
+    });
+  });
+
+  it('현재 회원이 방에 참가하지 않았다면 null을 반환한다', async () => {
+    roomFindUnique.mockResolvedValue({
+      hostParticipantId: 'host-participant-id',
+      participants: [],
+    });
+
+    await expect(
+      roomsService.findCurrentParticipant(
+        { type: 'USER', userId: 'user-id' },
+        'ABC234',
+      ),
+    ).resolves.toBeNull();
+    expect(roomFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          participants: expect.objectContaining({
+            where: { userId: 'user-id' },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('현재 참가자를 조회할 방이 없으면 ROOM_NOT_FOUND 오류를 발생시킨다', async () => {
+    roomFindUnique.mockResolvedValue(null);
+
+    const error = await getCurrentParticipantError(
+      roomsService,
+      { type: 'USER', userId: 'user-id' },
+      'ZZZZZZ',
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.NOT_FOUND);
+    expect(error.getResponse()).toEqual({
+      code: 'ROOM_NOT_FOUND',
+      message: '방을 찾을 수 없습니다.',
+    });
+  });
+
   it('회원의 계정 닉네임으로 방에 참가한다', async () => {
     userFindUnique.mockResolvedValue({ nickname: '회원닉네임' });
     roomFindUnique.mockResolvedValue(joinableRoom);
@@ -905,6 +987,24 @@ async function getJoinRoomError(
 ): Promise<AppException> {
   try {
     await roomsService.join(actor, code, dto);
+  } catch (error) {
+    if (error instanceof AppException) {
+      return error;
+    }
+  }
+
+  throw new Error('AppException이 발생하지 않았습니다.');
+}
+
+async function getCurrentParticipantError(
+  roomsService: RoomsService,
+  actor:
+    | { type: 'USER'; userId: string }
+    | { type: 'GUEST'; guestSessionId: string },
+  code: string,
+): Promise<AppException> {
+  try {
+    await roomsService.findCurrentParticipant(actor, code);
   } catch (error) {
     if (error instanceof AppException) {
       return error;
