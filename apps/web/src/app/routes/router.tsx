@@ -1,39 +1,45 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
-import { GamePage } from '@/pages/game'
-import { HomePage } from '@/pages/home'
-import { LobbyPage } from '@/pages/lobby'
-import { LoginPage } from '@/pages/login'
-import { RoomPage } from '@/pages/room'
-import { SignupPage } from '@/pages/signup'
+import { GamePage } from "@/pages/game";
+import { HomePage } from "@/pages/home";
+import { LobbyPage } from "@/pages/lobby";
+import { LoginPage } from "@/pages/login";
+import { RoomPage } from "@/pages/room";
+import { SignupPage } from "@/pages/signup";
+import { GuestOnlyRoute } from "@/app/routes/guest-only-route";
 
 const router = createBrowserRouter([
   {
-    path: '/',
+    path: "/",
     element: <HomePage />,
   },
   {
-    path: '/login',
-    element: <LoginPage />,
+    element: <GuestOnlyRoute />,
+    children: [
+      {
+        path: "/login",
+        element: <LoginPage />,
+      },
+      {
+        path: "/signup",
+        element: <SignupPage />,
+      },
+    ],
   },
   {
-    path: '/signup',
-    element: <SignupPage />,
-  },
-  {
-    path: '/lobby',
+    path: "/lobby",
     element: <LobbyPage />,
   },
   {
-    path: '/rooms/:roomCode',
+    path: "/rooms/:roomCode",
     element: <RoomPage />,
   },
   {
-    path: '/games/:gameId',
+    path: "/games/:gameId",
     element: <GamePage />,
   },
-])
+]);
 
 export function AppRouter() {
-  return <RouterProvider router={router} />
+  return <RouterProvider router={router} />;
 }
