@@ -11,6 +11,7 @@ type RetryRequestConfig = InternalAxiosRequestConfig & {
 
 const REFRESH_EXCLUDED_PATHS = [
   '/auth/login',
+  '/auth/logout',
   '/auth/signup',
   '/auth/refresh',
 ] as const
