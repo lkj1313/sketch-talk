@@ -3,10 +3,12 @@ import type {
   RefreshResponse,
 } from '@sketch-talk/contracts'
 
-import { httpClient } from '@/shared/api'
+import { refreshClient } from '@/shared/api'
 
 export async function refreshSession(): Promise<RefreshResponse> {
-  const response = await httpClient.post<ApiSuccessResponse<RefreshResponse>>(
+  const response = await refreshClient.post<
+    ApiSuccessResponse<RefreshResponse>
+  >(
     '/auth/refresh',
   )
 
