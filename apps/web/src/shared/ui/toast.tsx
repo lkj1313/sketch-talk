@@ -85,7 +85,7 @@ function ToastDescription({
   return (
     <ToastPrimitive.Description
       data-slot="toast-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-sm text-current opacity-70", className)}
       {...props}
     />
   )
@@ -115,10 +115,10 @@ function ToastClose({
   return (
     <ToastPrimitive.Close
       data-slot="toast-close"
-      aria-label="Close toast"
+      aria-label="알림 닫기"
       render={render}
       className={cn(
-        "relative shrink-0 text-muted-foreground after:absolute after:-inset-2 after:content-[''] hover:text-foreground",
+        "relative shrink-0 text-current opacity-60 after:absolute after:-inset-2 after:content-[''] hover:opacity-100",
         className
       )}
       {...props}
@@ -153,7 +153,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
 
   if (type === "error") {
     icon = (
-      <OctagonXIcon className="text-destructive" aria-hidden="true" />
+      <OctagonXIcon aria-hidden="true" />
     )
   }
 
@@ -177,11 +177,27 @@ function ToastIcon({ type }: { type: string | undefined }) {
   )
 }
 
+function getToastTypeClass(type: string | undefined): string | undefined {
+  if (type === "success") {
+    return "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50"
+  }
+
+  if (type === "error") {
+    return "border-red-300 bg-red-50 text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-50"
+  }
+
+  return undefined
+}
+
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager()
 
   return toasts.map((toastItem) => (
-    <Toast key={toastItem.id} toast={toastItem}>
+    <Toast
+      key={toastItem.id}
+      toast={toastItem}
+      className={getToastTypeClass(toastItem.type)}
+    >
       <ToastContent>
         <ToastIcon type={toastItem.type} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
