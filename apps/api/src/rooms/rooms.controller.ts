@@ -49,6 +49,20 @@ export class RoomsController {
   }
 
   @UseGuards(ActorGuard)
+  @Get(':code/participants/me')
+  async findCurrentParticipant(
+    @CurrentActor() actor: RequestActor,
+    @Param() params: RoomCodeParamDto,
+  ): Promise<ControllerResponse<RoomParticipantResponseDto | null>> {
+    const participant = await this.roomsService.findCurrentParticipant(
+      actor,
+      params.code,
+    );
+
+    return { data: participant };
+  }
+
+  @UseGuards(ActorGuard)
   @Post(':code/start')
   async start(
     @CurrentActor() actor: RequestActor,
