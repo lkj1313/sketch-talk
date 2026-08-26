@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { RoomCard, useRooms } from '@/entities/room'
 import { useSessionStore } from '@/entities/session'
 import { LogoutButton } from '@/features/auth/logout'
+import { CreateRoomDialog } from '@/features/room/create'
 import { Button, Spinner } from '@/shared/ui'
 
 const PAGE_SIZE = 12
@@ -32,17 +33,20 @@ export function LobbyPage() {
               참여할 방을 선택해 그림 게임을 시작해보세요.
             </p>
           </div>
-          {accessToken ? (
-            <LogoutButton />
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void navigate('/login')}
-            >
-              로그인
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <CreateRoomDialog />
+            {accessToken ? (
+              <LogoutButton />
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void navigate('/login')}
+              >
+                로그인
+              </Button>
+            )}
+          </div>
         </header>
 
         <section className="mt-8" aria-labelledby="room-list-heading">
