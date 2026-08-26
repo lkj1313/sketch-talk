@@ -1,3 +1,6 @@
 export { getRooms, type RoomListResult } from './api/get-rooms'
+export { getCurrentRoomParticipant, getRoom } from './api/get-room'
+export { roomQueryKeys } from './model/room-query-keys'
+export { useCurrentRoomParticipant, useRoom } from './model/use-room'
 export { useRooms } from './model/use-rooms'
 export { RoomCard } from './ui/room-card'

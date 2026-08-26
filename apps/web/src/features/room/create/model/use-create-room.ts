@@ -1,5 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
+import { roomQueryKeys } from '@/entities/room'
+
 import { createRoom } from '../api/create-room'
 
 export function useCreateRoom() {
@@ -8,7 +10,7 @@ export function useCreateRoom() {
   return useMutation({
     mutationFn: createRoom,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['rooms'] })
+      await queryClient.invalidateQueries({ queryKey: roomQueryKeys.all })
     },
   })
 }
