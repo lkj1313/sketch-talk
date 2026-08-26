@@ -14,6 +14,7 @@ const REFRESH_EXCLUDED_PATHS = [
   '/auth/logout',
   '/auth/signup',
   '/auth/refresh',
+  '/guest-sessions',
 ] as const
 
 let refreshPromise: Promise<string> | null = null
