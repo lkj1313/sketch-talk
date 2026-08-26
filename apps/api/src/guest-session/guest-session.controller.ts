@@ -1,9 +1,8 @@
-import { Controller, Post, Res } from '@nestjs/common';
+import { Controller, Post, Req, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { CookieOptions, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import type { ControllerResponse } from '@/common/types/api-response.type';
 import {
-  GUEST_SESSION_EXPIRES_IN_MS,
   GUEST_TOKEN_COOKIE_NAME,
   GUEST_TOKEN_COOKIE_PATH,
 } from '@/guest-session/constants/guest-session.constants';
@@ -19,25 +18,34 @@ export class GuestSessionController {
 
   @Post()
   async issue(
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<ControllerResponse<GuestSessionResponseDto>> {
-    const { result, guestToken } = await this.guestSessionService.issue();
+    const { result, guestToken } = await this.guestSessionService.issue(
+      this.getGuestTokenCookie(request),
+    );
     response.cookie(
       GUEST_TOKEN_COOKIE_NAME,
       guestToken,
-      this.getGuestTokenCookieOptions(),
+      this.getGuestTokenCookieOptions(result.expiresAt),
     );
 
     return { data: result };
   }
 
-  private getGuestTokenCookieOptions(): CookieOptions {
+  private getGuestTokenCookie(request: Request): string | undefined {
+    const value: unknown = request.cookies?.[GUEST_TOKEN_COOKIE_NAME];
+
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  private getGuestTokenCookieOptions(expiresAt: string): CookieOptions {
     return {
       httpOnly: true,
       secure: this.configService.get<string>('NODE_ENV') === 'production',
       sameSite: 'lax',
       path: GUEST_TOKEN_COOKIE_PATH,
-      maxAge: GUEST_SESSION_EXPIRES_IN_MS,
+      maxAge: Math.max(0, new Date(expiresAt).getTime() - Date.now()),
     };
   }
 }
