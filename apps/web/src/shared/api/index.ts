@@ -1,4 +1,4 @@
-export { httpClient } from './http-client'
+export { httpClient, refreshClient } from './http-client'
 export {
   connectRoomSocket,
   disconnectRoomSocket,

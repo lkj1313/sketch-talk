@@ -1,10 +1,15 @@
-import type { PropsWithChildren } from 'react'
+import { useEffect, type PropsWithChildren } from 'react'
 
-import { useRestoreSession } from '@/features/auth/session'
+import {
+  setupAuthInterceptors,
+  useRestoreSession,
+} from '@/features/auth/session'
 import { Spinner } from '@/shared/ui'
 
 export function SessionProvider({ children }: PropsWithChildren) {
   const { isPending } = useRestoreSession()
+
+  useEffect(() => setupAuthInterceptors(), [])
 
   if (isPending) {
     return (
