@@ -34,6 +34,16 @@ vi.mock('@/shared/api', () => ({
   roomSocket: mocks.socket,
   connectRoomSocket: mocks.connectRoomSocket,
   disconnectRoomSocket: mocks.disconnectRoomSocket,
+  ROOM_SOCKET_EVENT: {
+    SUBSCRIBE: 'room:subscribe',
+    STATE: 'room:state',
+    PARTICIPANT_JOINED: 'room:participant-joined',
+    PARTICIPANT_LEFT: 'room:participant-left',
+    HOST_CHANGED: 'room:host-changed',
+    READY_CHANGED: 'room:ready-changed',
+    GAME_STARTED: 'room:game-started',
+    ERROR: 'realtime:error',
+  },
 }))
 
 vi.mock('@/shared/ui', () => ({
@@ -231,7 +241,9 @@ describe('useRoomRealtime', () => {
     expect(queryClient.getQueryData(roomQueryKeys.detail(room.code))).toEqual(
       playingRoom,
     )
-    expect(mocks.navigate).toHaveBeenCalledWith('/games/game-id')
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      '/rooms/ABC234/games/game-id',
+    )
   })
 
   it('실시간 오류를 토스트로 안내하고 방 삭제 시 로비로 이동한다', () => {
