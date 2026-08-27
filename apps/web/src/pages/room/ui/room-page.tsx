@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useCurrentRoomParticipant, useRoom } from '@/entities/room'
 import { JoinRoomForm } from '@/features/room/join'
 import { RoomActions } from '@/features/room/manage'
+import { useRoomRealtime } from '@/features/room/realtime'
 import { Button, Spinner } from '@/shared/ui'
 
 const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/
@@ -23,6 +24,10 @@ export function RoomPage() {
   const roomCode = isValidRoomCode ? normalizedRoomCode : ''
   const roomQuery = useRoom(roomCode)
   const currentParticipantQuery = useCurrentRoomParticipant(roomCode)
+  useRoomRealtime({
+    code: roomCode,
+    enabled: Boolean(currentParticipantQuery.data),
+  })
 
   if (!isValidRoomCode) {
     return (
