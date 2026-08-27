@@ -18,11 +18,10 @@ import { useSessionStore } from '@/entities/session'
 import {
   connectRoomSocket,
   disconnectRoomSocket,
+  ROOM_SOCKET_EVENT,
   roomSocket,
 } from '@/shared/api'
 import { toast } from '@/shared/ui'
-
-import { ROOM_REALTIME_EVENT } from './room-realtime-events'
 
 type UseRoomRealtimeOptions = {
   code: string
@@ -42,7 +41,7 @@ export function useRoomRealtime({ code, enabled }: UseRoomRealtimeOptions): void
     const subscribeRequest: RoomSubscribeRequest = { code }
 
     function subscribeRoom(): void {
-      roomSocket.emit(ROOM_REALTIME_EVENT.SUBSCRIBE, subscribeRequest)
+      roomSocket.emit(ROOM_SOCKET_EVENT.SUBSCRIBE, subscribeRequest)
     }
 
     function handleRoomState(room: RoomDetailResponse): void {
@@ -182,7 +181,9 @@ export function useRoomRealtime({ code, enabled }: UseRoomRealtimeOptions): void
 
       queryClient.setQueryData(roomQueryKeys.detail(code), event.room)
       void queryClient.invalidateQueries({ queryKey: roomQueryKeys.lists })
-      void navigate(`/games/${event.game.gameSessionId}`)
+      void navigate(
+        `/rooms/${event.roomCode}/games/${event.game.gameSessionId}`,
+      )
     }
 
     function handleRealtimeError(error: RealtimeErrorResponse): void {
@@ -194,16 +195,16 @@ export function useRoomRealtime({ code, enabled }: UseRoomRealtimeOptions): void
     }
 
     roomSocket.on('connect', subscribeRoom)
-    roomSocket.on(ROOM_REALTIME_EVENT.STATE, handleRoomState)
+    roomSocket.on(ROOM_SOCKET_EVENT.STATE, handleRoomState)
     roomSocket.on(
-      ROOM_REALTIME_EVENT.PARTICIPANT_JOINED,
+      ROOM_SOCKET_EVENT.PARTICIPANT_JOINED,
       handleParticipantJoined,
     )
-    roomSocket.on(ROOM_REALTIME_EVENT.PARTICIPANT_LEFT, handleParticipantLeft)
-    roomSocket.on(ROOM_REALTIME_EVENT.HOST_CHANGED, handleHostChanged)
-    roomSocket.on(ROOM_REALTIME_EVENT.READY_CHANGED, handleReadyChanged)
-    roomSocket.on(ROOM_REALTIME_EVENT.GAME_STARTED, handleGameStarted)
-    roomSocket.on(ROOM_REALTIME_EVENT.ERROR, handleRealtimeError)
+    roomSocket.on(ROOM_SOCKET_EVENT.PARTICIPANT_LEFT, handleParticipantLeft)
+    roomSocket.on(ROOM_SOCKET_EVENT.HOST_CHANGED, handleHostChanged)
+    roomSocket.on(ROOM_SOCKET_EVENT.READY_CHANGED, handleReadyChanged)
+    roomSocket.on(ROOM_SOCKET_EVENT.GAME_STARTED, handleGameStarted)
+    roomSocket.on(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
 
     if (roomSocket.connected) {
       subscribeRoom()
@@ -213,19 +214,19 @@ export function useRoomRealtime({ code, enabled }: UseRoomRealtimeOptions): void
 
     return () => {
       roomSocket.off('connect', subscribeRoom)
-      roomSocket.off(ROOM_REALTIME_EVENT.STATE, handleRoomState)
+      roomSocket.off(ROOM_SOCKET_EVENT.STATE, handleRoomState)
       roomSocket.off(
-        ROOM_REALTIME_EVENT.PARTICIPANT_JOINED,
+        ROOM_SOCKET_EVENT.PARTICIPANT_JOINED,
         handleParticipantJoined,
       )
       roomSocket.off(
-        ROOM_REALTIME_EVENT.PARTICIPANT_LEFT,
+        ROOM_SOCKET_EVENT.PARTICIPANT_LEFT,
         handleParticipantLeft,
       )
-      roomSocket.off(ROOM_REALTIME_EVENT.HOST_CHANGED, handleHostChanged)
-      roomSocket.off(ROOM_REALTIME_EVENT.READY_CHANGED, handleReadyChanged)
-      roomSocket.off(ROOM_REALTIME_EVENT.GAME_STARTED, handleGameStarted)
-      roomSocket.off(ROOM_REALTIME_EVENT.ERROR, handleRealtimeError)
+      roomSocket.off(ROOM_SOCKET_EVENT.HOST_CHANGED, handleHostChanged)
+      roomSocket.off(ROOM_SOCKET_EVENT.READY_CHANGED, handleReadyChanged)
+      roomSocket.off(ROOM_SOCKET_EVENT.GAME_STARTED, handleGameStarted)
+      roomSocket.off(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
       disconnectRoomSocket()
     }
   }, [accessToken, code, enabled, navigate, queryClient])

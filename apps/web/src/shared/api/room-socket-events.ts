@@ -1,4 +1,4 @@
-export const ROOM_REALTIME_EVENT = {
+export const ROOM_SOCKET_EVENT = {
   SUBSCRIBE: 'room:subscribe',
   STATE: 'room:state',
   PARTICIPANT_JOINED: 'room:participant-joined',
@@ -6,5 +6,7 @@ export const ROOM_REALTIME_EVENT = {
   HOST_CHANGED: 'room:host-changed',
   READY_CHANGED: 'room:ready-changed',
   GAME_STARTED: 'room:game-started',
+  GAME_STATE: 'game:state',
+  WORD_ASSIGNED: 'game:word-assigned',
   ERROR: 'realtime:error',
 } as const
