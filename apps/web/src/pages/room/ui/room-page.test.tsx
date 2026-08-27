@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   useCurrentRoomParticipant: vi.fn(),
   refetchRoom: vi.fn(),
   refetchCurrentParticipant: vi.fn(),
+  useRoomRealtime: vi.fn(),
 }))
 
 vi.mock('@/entities/room', () => ({
@@ -30,6 +31,10 @@ vi.mock('@/features/room/manage', () => ({
   RoomActions: ({ participant }: { participant: { nickname: string } }) => (
     <p>방 관리 {participant.nickname}</p>
   ),
+}))
+
+vi.mock('@/features/room/realtime', () => ({
+  useRoomRealtime: mocks.useRoomRealtime,
 }))
 
 const hostParticipant: RoomParticipantResponse = {
@@ -150,5 +155,9 @@ describe('RoomPage', () => {
     expect(screen.getByText('나')).toBeInTheDocument()
     expect(screen.getByText('방 관리 참가자님')).toBeInTheDocument()
     expect(screen.queryByText('참가 양식 ABC234')).not.toBeInTheDocument()
+    expect(mocks.useRoomRealtime).toHaveBeenCalledWith({
+      code: 'ABC234',
+      enabled: true,
+    })
   })
 })
