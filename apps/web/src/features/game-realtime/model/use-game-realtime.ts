@@ -1,4 +1,5 @@
 import type {
+  GameChatMessageEvent,
   GameReconnectState,
   GameWordAssignedEvent,
   RealtimeErrorResponse,
@@ -23,6 +24,7 @@ type UseGameRealtimeOptions = {
 type UseGameRealtimeResult = {
   gameState: GameReconnectState | null
   assignedWord: string | null
+  messages: GameChatMessageEvent[]
   isConnected: boolean
 }
 
@@ -33,6 +35,7 @@ export function useGameRealtime({
   const accessToken = useSessionStore((state) => state.accessToken)
   const [gameState, setGameState] = useState<GameReconnectState | null>(null)
   const [assignedWord, setAssignedWord] = useState<string | null>(null)
+  const [messages, setMessages] = useState<GameChatMessageEvent[]>([])
   const [isConnected, setIsConnected] = useState(roomSocket.connected)
 
   useEffect(() => {
@@ -68,6 +71,10 @@ export function useGameRealtime({
       setAssignedWord(event.answer)
     }
 
+    function handleChatMessage(message: GameChatMessageEvent): void {
+      setMessages((currentMessages) => [...currentMessages, message])
+    }
+
     function handleRealtimeError(error: RealtimeErrorResponse): void {
       toast.add({
         title: '게임 연결 오류',
@@ -80,6 +87,7 @@ export function useGameRealtime({
     roomSocket.on('disconnect', handleDisconnect)
     roomSocket.on(ROOM_SOCKET_EVENT.GAME_STATE, handleGameState)
     roomSocket.on(ROOM_SOCKET_EVENT.WORD_ASSIGNED, handleWordAssigned)
+    roomSocket.on(ROOM_SOCKET_EVENT.CHAT_MESSAGE, handleChatMessage)
     roomSocket.on(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
 
     if (roomSocket.connected) {
@@ -93,10 +101,11 @@ export function useGameRealtime({
       roomSocket.off('disconnect', handleDisconnect)
       roomSocket.off(ROOM_SOCKET_EVENT.GAME_STATE, handleGameState)
       roomSocket.off(ROOM_SOCKET_EVENT.WORD_ASSIGNED, handleWordAssigned)
+      roomSocket.off(ROOM_SOCKET_EVENT.CHAT_MESSAGE, handleChatMessage)
       roomSocket.off(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
       disconnectRoomSocket()
     }
   }, [accessToken, gameId, roomCode])
 
-  return { gameState, assignedWord, isConnected }
+  return { gameState, assignedWord, messages, isConnected }
 }

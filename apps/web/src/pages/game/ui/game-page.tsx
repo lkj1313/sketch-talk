@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom'
 
+import { useCurrentRoomParticipant } from '@/entities/room'
 import { sendGameMessage } from '@/features/game-chat-send'
 import { useGameRealtime } from '@/features/game-realtime'
 import { GameChat } from '@/widgets/game-chat'
@@ -10,7 +11,8 @@ import { useRoundCountdown } from '../model/use-round-countdown'
 export function GamePage() {
   const { roomCode = '', gameId = '' } = useParams()
   const normalizedRoomCode = roomCode.trim().toUpperCase()
-  const { gameState, assignedWord, isConnected } = useGameRealtime({
+  const currentParticipantQuery = useCurrentRoomParticipant(normalizedRoomCode)
+  const { gameState, assignedWord, messages, isConnected } = useGameRealtime({
     roomCode: normalizedRoomCode,
     gameId,
   })
@@ -30,8 +32,9 @@ export function GamePage() {
         />
         <GameChat
           className="lg:max-h-[640px]"
+          currentParticipantId={currentParticipantQuery.data?.id}
           disabled={isChatDisabled}
-          messages={[]}
+          messages={messages}
           onSendMessage={sendGameMessage}
         />
       </div>

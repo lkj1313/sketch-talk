@@ -1,4 +1,5 @@
 import type {
+  GameChatMessageEvent,
   GameReconnectState,
   GameWordAssignedEvent,
 } from '@sketch-talk/contracts'
@@ -33,6 +34,7 @@ vi.mock('@/shared/api', () => ({
   ROOM_SOCKET_EVENT: {
     SUBSCRIBE: 'room:subscribe',
     GAME_STATE: 'game:state',
+    CHAT_MESSAGE: 'game:chat-message',
     WORD_ASSIGNED: 'game:word-assigned',
     ERROR: 'realtime:error',
   },
@@ -112,6 +114,29 @@ describe('useGameRealtime', () => {
 
     expect(result.current.gameState).toEqual(gameState)
     expect(result.current.assignedWord).toBe('사과')
+  })
+
+  it('서버에서 받은 일반 채팅 메시지를 목록에 추가한다', () => {
+    const { result, unmount } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const chatMessage = {
+      participant: { id: 'participant-id', nickname: '참가자' },
+      message: '안녕하세요',
+      sentAt: '2026-08-27T00:00:10.000Z',
+    } satisfies GameChatMessageEvent
+
+    expect(result.current.messages).toEqual([])
+
+    receive('game:chat-message', chatMessage)
+
+    expect(result.current.messages).toEqual([chatMessage])
+
+    unmount()
+    expect(mocks.socket.off).toHaveBeenCalledWith(
+      'game:chat-message',
+      expect.any(Function),
+    )
   })
 
   it('연결 종료와 서버 오류를 화면 상태 및 토스트에 반영한다', () => {
