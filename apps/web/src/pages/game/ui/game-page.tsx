@@ -16,6 +16,7 @@ export function GamePage() {
     gameState,
     assignedWord,
     correctAnswer,
+    roundTimedOut,
     messages,
     isConnected,
   } = useGameRealtime({
@@ -34,6 +35,7 @@ export function GamePage() {
           gameState={gameState}
           assignedWord={assignedWord}
           correctAnswer={correctAnswer}
+          roundTimedOut={roundTimedOut}
           isConnected={isConnected}
           remainingSeconds={remainingSeconds}
         />

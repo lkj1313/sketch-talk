@@ -37,6 +37,7 @@ const meta = {
     gameState,
     assignedWord: null,
     correctAnswer: null,
+    roundTimedOut: null,
     isConnected: true,
     remainingSeconds: 120,
   },
@@ -71,6 +72,17 @@ export const 정답발생: Story = {
         awardedScore: 50,
       },
     },
+  },
+}
+
+export const 시간초과: Story = {
+  args: {
+    roundTimedOut: {
+      gameSessionId: 'preview-game-id',
+      roundId: 'preview-round-id',
+      answer: '사과',
+    },
+    remainingSeconds: 0,
   },
 }
 
