@@ -47,6 +47,7 @@ const meta = {
   args: {
     messages: [],
     currentParticipantId: 'participant-1',
+    onSendMessage: () => undefined,
   },
 } satisfies Meta<typeof GameChat>
 

@@ -5,16 +5,19 @@ import {
   ChatMessageItem,
   type ChatMessage,
 } from '@/entities/chat-message'
+import { GameChatInput } from '@/features/game-chat-send'
 import { cn } from '@/shared/lib/cn'
 
 export type GameChatProps = {
   messages: ChatMessage[]
+  onSendMessage: (message: string) => void
   currentParticipantId?: string
   className?: string
 }
 
 export function GameChat({
   messages,
+  onSendMessage,
   currentParticipantId,
   className,
 }: GameChatProps) {
@@ -69,6 +72,8 @@ export function GameChat({
           </ul>
         )}
       </div>
+
+      <GameChatInput onSendMessage={onSendMessage} />
     </section>
   )
 }

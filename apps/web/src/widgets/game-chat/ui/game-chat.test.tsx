@@ -1,11 +1,12 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 
 import { GameChat } from './game-chat'
 
 describe('GameChat', () => {
   it('채팅 영역의 제목과 빈 상태를 표시한다', () => {
-    render(<GameChat messages={[]} />)
+    render(<GameChat messages={[]} onSendMessage={vi.fn()} />)
 
     expect(screen.getByRole('region', { name: '채팅' })).toBeInTheDocument()
     expect(
@@ -20,6 +21,7 @@ describe('GameChat', () => {
     render(
       <GameChat
         currentParticipantId="participant-1"
+        onSendMessage={vi.fn()}
         messages={[
           {
             participant: { id: 'participant-2', nickname: '그림왕' },
@@ -47,6 +49,7 @@ describe('GameChat', () => {
 
     render(
       <GameChat
+        onSendMessage={vi.fn()}
         messages={[
           {
             participant: { id: 'participant-2', nickname: '그림왕' },
@@ -61,5 +64,19 @@ describe('GameChat', () => {
       'break-words',
       '[overflow-wrap:anywhere]',
     )
+  })
+
+  it('입력한 메시지를 상위 컴포넌트에 전달한다', async () => {
+    const user = userEvent.setup()
+    const onSendMessage = vi.fn()
+
+    render(<GameChat messages={[]} onSendMessage={onSendMessage} />)
+
+    await user.type(
+      screen.getByRole('textbox', { name: '채팅 메시지' }),
+      '정답인가요?{Enter}',
+    )
+
+    expect(onSendMessage).toHaveBeenCalledWith('정답인가요?')
   })
 })
