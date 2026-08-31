@@ -1,15 +1,25 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { GamePage } from './game-page'
 
 const mocks = vi.hoisted(() => ({
+  emit: vi.fn(),
   useGameRealtime: vi.fn(),
 }))
 
 vi.mock('@/features/game-realtime', () => ({
   useGameRealtime: mocks.useGameRealtime,
+}))
+
+vi.mock('@/shared/api', () => ({
+  ROOM_SOCKET_EVENT: {
+    MESSAGE: 'game:message',
+  },
+  roomSocket: {
+    emit: mocks.emit,
+  },
 }))
 
 function renderGamePage(): void {
@@ -27,6 +37,7 @@ function renderGamePage(): void {
 
 describe('GamePage', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-27T00:00:00.000Z'))
     mocks.useGameRealtime.mockReturnValue({
@@ -70,6 +81,20 @@ describe('GamePage', () => {
     expect(screen.getByText('실시간 연결됨')).toBeInTheDocument()
   })
 
+  it('입력한 채팅 메시지를 게임 소켓으로 전송한다', () => {
+    renderGamePage()
+
+    const input = screen.getByRole('textbox', { name: '채팅 메시지' })
+
+    fireEvent.change(input, { target: { value: '안녕하세요' } })
+    fireEvent.submit(screen.getByRole('form', { name: '채팅 메시지 전송' }))
+
+    expect(mocks.emit).toHaveBeenCalledWith('game:message', {
+      message: '안녕하세요',
+    })
+    expect(input).toHaveValue('')
+  })
+
   it('게임 상태를 받기 전에는 로딩 상태를 표시한다', () => {
     mocks.useGameRealtime.mockReturnValue({
       gameState: null,
@@ -83,5 +108,8 @@ describe('GamePage', () => {
       screen.getByRole('status', { name: '게임 상태 불러오는 중' }),
     ).toBeInTheDocument()
     expect(screen.getByText('실시간 연결 중')).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: '채팅 메시지' }),
+    ).toBeDisabled()
   })
 })
