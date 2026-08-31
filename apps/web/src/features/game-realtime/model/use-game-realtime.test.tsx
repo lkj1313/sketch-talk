@@ -5,7 +5,7 @@ import type {
   GameWordAssignedEvent,
 } from '@sketch-talk/contracts'
 import { act, renderHook } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useSessionStore } from '@/entities/session'
 
@@ -69,6 +69,10 @@ describe('useGameRealtime', () => {
     mocks.handlers.clear()
     mocks.socket.connected = false
     useSessionStore.getState().clearSession()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('소켓 연결 후 현재 방을 구독한다', () => {
@@ -177,6 +181,37 @@ describe('useGameRealtime', () => {
       'game:correct-answer',
       expect.any(Function),
     )
+  })
+
+  it('정답 결과를 3초 후 초기화한다', () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const correctAnswer = {
+      gameSessionId: 'game-id',
+      roundId: 'round-id',
+      answer: '사과',
+      guesser: {
+        id: 'guesser-id',
+        nickname: '정답자',
+        awardedScore: 100,
+      },
+      drawer: {
+        id: 'drawer-id',
+        nickname: '출제자',
+        awardedScore: 50,
+      },
+    } satisfies GameCorrectAnswerEvent
+
+    receive('game:correct-answer', correctAnswer)
+    expect(result.current.correctAnswer).toEqual(correctAnswer)
+
+    act(() => {
+      vi.advanceTimersByTime(3_000)
+    })
+
+    expect(result.current.correctAnswer).toBeNull()
   })
 
   it('연결 종료와 서버 오류를 화면 상태 및 토스트에 반영한다', () => {

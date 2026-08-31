@@ -1,6 +1,11 @@
-import type { GameReconnectState } from '@sketch-talk/contracts'
+import type {
+  GameCorrectAnswerEvent,
+  GameReconnectState,
+} from '@sketch-talk/contracts'
 
 import { Spinner } from '@/shared/ui'
+
+import { CorrectAnswerNotice } from './correct-answer-notice'
 
 const DIFFICULTY_LABEL = {
   EASY: '쉬움',
@@ -12,6 +17,7 @@ export type GameScreenProps = {
   roomCode: string
   gameState: GameReconnectState | null
   assignedWord: string | null
+  correctAnswer: GameCorrectAnswerEvent | null
   isConnected: boolean
   remainingSeconds: number
 }
@@ -20,6 +26,7 @@ export function GameScreen({
   roomCode,
   gameState,
   assignedWord,
+  correctAnswer,
   isConnected,
   remainingSeconds,
 }: GameScreenProps) {
@@ -40,6 +47,8 @@ export function GameScreen({
           {isConnected ? '실시간 연결됨' : '실시간 연결 중'}
         </p>
       </header>
+
+      {correctAnswer && <CorrectAnswerNotice result={correctAnswer} />}
 
       {!gameState ? (
         <div className="flex min-h-72 flex-col items-center justify-center gap-3">

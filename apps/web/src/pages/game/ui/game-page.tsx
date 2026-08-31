@@ -12,7 +12,13 @@ export function GamePage() {
   const { roomCode = '', gameId = '' } = useParams()
   const normalizedRoomCode = roomCode.trim().toUpperCase()
   const currentParticipantQuery = useCurrentRoomParticipant(normalizedRoomCode)
-  const { gameState, assignedWord, messages, isConnected } = useGameRealtime({
+  const {
+    gameState,
+    assignedWord,
+    correctAnswer,
+    messages,
+    isConnected,
+  } = useGameRealtime({
     roomCode: normalizedRoomCode,
     gameId,
   })
@@ -27,6 +33,7 @@ export function GamePage() {
           roomCode={normalizedRoomCode}
           gameState={gameState}
           assignedWord={assignedWord}
+          correctAnswer={correctAnswer}
           isConnected={isConnected}
           remainingSeconds={remainingSeconds}
         />

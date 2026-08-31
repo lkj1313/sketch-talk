@@ -36,6 +36,7 @@ const meta = {
     roomCode: 'ABC234',
     gameState,
     assignedWord: null,
+    correctAnswer: null,
     isConnected: true,
     remainingSeconds: 120,
   },
@@ -50,6 +51,26 @@ export const 참가자화면: Story = {}
 export const 출제자화면: Story = {
   args: {
     assignedWord: '사과',
+  },
+}
+
+export const 정답발생: Story = {
+  args: {
+    correctAnswer: {
+      gameSessionId: 'preview-game-id',
+      roundId: 'preview-round-id',
+      answer: '사과',
+      guesser: {
+        id: 'preview-guesser-id',
+        nickname: '정답왕',
+        awardedScore: 100,
+      },
+      drawer: {
+        id: 'preview-drawer-id',
+        nickname: '그림왕',
+        awardedScore: 50,
+      },
+    },
   },
 }
 
