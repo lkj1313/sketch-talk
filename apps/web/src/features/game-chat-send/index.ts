@@ -1,3 +1,4 @@
+export { sendGameMessage } from './api/send-game-message'
 export {
   GameChatInput,
   type GameChatInputProps,
