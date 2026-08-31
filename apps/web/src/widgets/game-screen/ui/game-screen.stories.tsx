@@ -23,6 +23,15 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
   },
+  decorators: [
+    (Story) => (
+      <main className="min-h-screen bg-muted/30 px-4 py-8">
+        <div className="mx-auto w-full max-w-5xl">
+          <Story />
+        </div>
+      </main>
+    ),
+  ],
   args: {
     roomCode: 'ABC234',
     gameState,

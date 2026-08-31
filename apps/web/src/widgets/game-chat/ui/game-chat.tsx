@@ -12,6 +12,7 @@ export type GameChatProps = {
   messages: ChatMessage[]
   onSendMessage: (message: string) => void
   currentParticipantId?: string
+  disabled?: boolean
   className?: string
 }
 
@@ -19,6 +20,7 @@ export function GameChat({
   messages,
   onSendMessage,
   currentParticipantId,
+  disabled = false,
   className,
 }: GameChatProps) {
   const titleId = useId()
@@ -73,7 +75,7 @@ export function GameChat({
         )}
       </div>
 
-      <GameChatInput onSendMessage={onSendMessage} />
+      <GameChatInput disabled={disabled} onSendMessage={onSendMessage} />
     </section>
   )
 }
