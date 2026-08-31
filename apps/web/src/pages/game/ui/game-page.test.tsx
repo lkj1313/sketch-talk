@@ -62,6 +62,7 @@ describe('GamePage', () => {
       assignedWord: '사과',
       correctAnswer: null,
       roundTimedOut: null,
+      roundSkipped: null,
       gameResult: null,
       messages: [],
       isConnected: true,
@@ -122,6 +123,7 @@ describe('GamePage', () => {
       assignedWord: null,
       correctAnswer: null,
       roundTimedOut: null,
+      roundSkipped: null,
       gameResult: null,
       messages: [
         {
@@ -145,6 +147,7 @@ describe('GamePage', () => {
       assignedWord: null,
       correctAnswer: null,
       roundTimedOut: null,
+      roundSkipped: null,
       gameResult: {
         gameSessionId: 'game-id',
         scores: [
@@ -170,6 +173,7 @@ describe('GamePage', () => {
       assignedWord: null,
       correctAnswer: null,
       roundTimedOut: null,
+      roundSkipped: null,
       gameResult: null,
       messages: [],
       isConnected: false,

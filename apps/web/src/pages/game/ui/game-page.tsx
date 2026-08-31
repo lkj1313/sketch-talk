@@ -18,6 +18,7 @@ export function GamePage() {
     assignedWord,
     correctAnswer,
     roundTimedOut,
+    roundSkipped,
     gameResult,
     messages,
     isConnected,
@@ -47,6 +48,7 @@ export function GamePage() {
           assignedWord={assignedWord}
           correctAnswer={correctAnswer}
           roundTimedOut={roundTimedOut}
+          roundSkipped={roundSkipped}
           isConnected={isConnected}
           remainingSeconds={remainingSeconds}
         />
