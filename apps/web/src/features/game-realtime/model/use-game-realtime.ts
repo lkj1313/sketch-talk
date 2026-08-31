@@ -17,6 +17,8 @@ import {
 } from '@/shared/api'
 import { toast } from '@/shared/ui'
 
+const CORRECT_ANSWER_DISPLAY_DURATION_MS = 3_000
+
 type UseGameRealtimeOptions = {
   roomCode: string
   gameId: string
@@ -41,6 +43,18 @@ export function useGameRealtime({
     useState<GameCorrectAnswerEvent | null>(null)
   const [messages, setMessages] = useState<GameChatMessageEvent[]>([])
   const [isConnected, setIsConnected] = useState(roomSocket.connected)
+
+  useEffect(() => {
+    if (!correctAnswer) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCorrectAnswer(null)
+    }, CORRECT_ANSWER_DISPLAY_DURATION_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [correctAnswer])
 
   useEffect(() => {
     if (!roomCode || !gameId) {

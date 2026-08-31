@@ -60,6 +60,7 @@ describe('GamePage', () => {
         expiresAt: '2026-08-27T00:02:00.000Z',
       },
       assignedWord: '사과',
+      correctAnswer: null,
       messages: [],
       isConnected: true,
     })
@@ -117,6 +118,7 @@ describe('GamePage', () => {
         expiresAt: '2026-08-27T00:02:00.000Z',
       },
       assignedWord: null,
+      correctAnswer: null,
       messages: [
         {
           participant: { id: 'participant-id', nickname: '현재 참가자' },
@@ -137,6 +139,7 @@ describe('GamePage', () => {
     mocks.useGameRealtime.mockReturnValue({
       gameState: null,
       assignedWord: null,
+      correctAnswer: null,
       messages: [],
       isConnected: false,
     })
