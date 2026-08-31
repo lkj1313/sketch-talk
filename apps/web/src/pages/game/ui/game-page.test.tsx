@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   useGameRealtime: vi.fn(),
 }))
 
-vi.mock('@/features/game/realtime', () => ({
+vi.mock('@/features/game-realtime', () => ({
   useGameRealtime: mocks.useGameRealtime,
 }))
 

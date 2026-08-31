@@ -1,9 +1,9 @@
 import { useParams } from 'react-router-dom'
 
-import { useGameRealtime } from '@/features/game/realtime'
+import { useGameRealtime } from '@/features/game-realtime'
+import { GameScreen } from '@/widgets/game-screen'
 
 import { useRoundCountdown } from '../model/use-round-countdown'
-import { GameScreen } from './game-screen'
 
 export function GamePage() {
   const { roomCode = '', gameId = '' } = useParams()
