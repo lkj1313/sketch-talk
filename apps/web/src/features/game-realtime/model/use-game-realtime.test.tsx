@@ -3,6 +3,7 @@ import type {
   GameCorrectAnswerEvent,
   GameFinishedEvent,
   GameReconnectState,
+  GameRoundSkippedEvent,
   GameRoundStartedState,
   GameRoundTimedOutEvent,
   GameWordAssignedEvent,
@@ -42,6 +43,7 @@ vi.mock('@/shared/api', () => ({
     CORRECT_ANSWER: 'game:correct-answer',
     ROUND_STARTED: 'game:round-started',
     ROUND_TIMED_OUT: 'game:round-timed-out',
+    ROUND_SKIPPED: 'game:round-skipped',
     GAME_FINISHED: 'game:finished',
     WORD_ASSIGNED: 'game:word-assigned',
     ERROR: 'realtime:error',
@@ -334,6 +336,40 @@ describe('useGameRealtime', () => {
     unmount()
     expect(mocks.socket.off).toHaveBeenCalledWith(
       'game:finished',
+      expect.any(Function),
+    )
+  })
+
+  it('현재 라운드의 건너뛰기 결과를 저장하고 3초 후 제거한다', () => {
+    vi.useFakeTimers()
+    const { result, unmount } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const skipped = {
+      gameSessionId: 'game-id',
+      roundId: 'round-id',
+      answer: '사과',
+      reason: 'DRAWER_LEFT',
+    } satisfies GameRoundSkippedEvent
+
+    receive('game:round-skipped', {
+      ...skipped,
+      gameSessionId: 'different-game-id',
+    } satisfies GameRoundSkippedEvent)
+    expect(result.current.roundSkipped).toBeNull()
+
+    receive('game:round-skipped', skipped)
+    expect(result.current.roundSkipped).toEqual(skipped)
+    expect(result.current.assignedWord).toBeNull()
+
+    act(() => {
+      vi.advanceTimersByTime(3_000)
+    })
+    expect(result.current.roundSkipped).toBeNull()
+
+    unmount()
+    expect(mocks.socket.off).toHaveBeenCalledWith(
+      'game:round-skipped',
       expect.any(Function),
     )
   })

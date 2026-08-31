@@ -38,6 +38,7 @@ const meta = {
     assignedWord: null,
     correctAnswer: null,
     roundTimedOut: null,
+    roundSkipped: null,
     isConnected: true,
     remainingSeconds: 120,
   },
@@ -83,6 +84,28 @@ export const 시간초과: Story = {
       answer: '사과',
     },
     remainingSeconds: 0,
+  },
+}
+
+export const 출제자퇴장: Story = {
+  args: {
+    roundSkipped: {
+      gameSessionId: 'preview-game-id',
+      roundId: 'preview-round-id',
+      answer: '사과',
+      reason: 'DRAWER_LEFT',
+    },
+  },
+}
+
+export const 참가자부족: Story = {
+  args: {
+    roundSkipped: {
+      gameSessionId: 'preview-game-id',
+      roundId: 'preview-round-id',
+      answer: '사과',
+      reason: 'NOT_ENOUGH_PARTICIPANTS',
+    },
   },
 }
 

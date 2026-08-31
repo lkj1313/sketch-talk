@@ -1,12 +1,14 @@
 import type {
   GameCorrectAnswerEvent,
   GameReconnectState,
+  GameRoundSkippedEvent,
   GameRoundTimedOutEvent,
 } from '@sketch-talk/contracts'
 
 import { Spinner } from '@/shared/ui'
 
 import { CorrectAnswerNotice } from './correct-answer-notice'
+import { RoundSkippedNotice } from './round-skipped-notice'
 import { RoundTimedOutNotice } from './round-timed-out-notice'
 
 const DIFFICULTY_LABEL = {
@@ -21,6 +23,7 @@ export type GameScreenProps = {
   assignedWord: string | null
   correctAnswer: GameCorrectAnswerEvent | null
   roundTimedOut: GameRoundTimedOutEvent | null
+  roundSkipped: GameRoundSkippedEvent | null
   isConnected: boolean
   remainingSeconds: number
 }
@@ -31,6 +34,7 @@ export function GameScreen({
   assignedWord,
   correctAnswer,
   roundTimedOut,
+  roundSkipped,
   isConnected,
   remainingSeconds,
 }: GameScreenProps) {
@@ -54,6 +58,7 @@ export function GameScreen({
 
       {correctAnswer && <CorrectAnswerNotice result={correctAnswer} />}
       {roundTimedOut && <RoundTimedOutNotice result={roundTimedOut} />}
+      {roundSkipped && <RoundSkippedNotice result={roundSkipped} />}
 
       {!gameState ? (
         <div className="flex min-h-72 flex-col items-center justify-center gap-3">
