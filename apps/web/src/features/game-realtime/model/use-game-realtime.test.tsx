@@ -3,6 +3,7 @@ import type {
   GameCorrectAnswerEvent,
   GameReconnectState,
   GameRoundStartedState,
+  GameRoundTimedOutEvent,
   GameWordAssignedEvent,
 } from '@sketch-talk/contracts'
 import { act, renderHook } from '@testing-library/react'
@@ -39,6 +40,7 @@ vi.mock('@/shared/api', () => ({
     CHAT_MESSAGE: 'game:chat-message',
     CORRECT_ANSWER: 'game:correct-answer',
     ROUND_STARTED: 'game:round-started',
+    ROUND_TIMED_OUT: 'game:round-timed-out',
     WORD_ASSIGNED: 'game:word-assigned',
     ERROR: 'realtime:error',
   },
@@ -267,6 +269,38 @@ describe('useGameRealtime', () => {
     unmount()
     expect(mocks.socket.off).toHaveBeenCalledWith(
       'game:round-started',
+      expect.any(Function),
+    )
+  })
+
+  it('현재 라운드의 시간 초과 결과를 저장하고 3초 후 제거한다', () => {
+    vi.useFakeTimers()
+    const { result, unmount } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const timedOut = {
+      gameSessionId: 'game-id',
+      roundId: 'round-id',
+      answer: '사과',
+    } satisfies GameRoundTimedOutEvent
+
+    receive('game:round-timed-out', {
+      ...timedOut,
+      gameSessionId: 'different-game-id',
+    } satisfies GameRoundTimedOutEvent)
+    expect(result.current.roundTimedOut).toBeNull()
+
+    receive('game:round-timed-out', timedOut)
+    expect(result.current.roundTimedOut).toEqual(timedOut)
+
+    act(() => {
+      vi.advanceTimersByTime(3_000)
+    })
+    expect(result.current.roundTimedOut).toBeNull()
+
+    unmount()
+    expect(mocks.socket.off).toHaveBeenCalledWith(
+      'game:round-timed-out',
       expect.any(Function),
     )
   })

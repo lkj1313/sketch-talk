@@ -61,6 +61,7 @@ describe('GamePage', () => {
       },
       assignedWord: '사과',
       correctAnswer: null,
+      roundTimedOut: null,
       messages: [],
       isConnected: true,
     })
@@ -119,6 +120,7 @@ describe('GamePage', () => {
       },
       assignedWord: null,
       correctAnswer: null,
+      roundTimedOut: null,
       messages: [
         {
           participant: { id: 'participant-id', nickname: '현재 참가자' },
@@ -140,6 +142,7 @@ describe('GamePage', () => {
       gameState: null,
       assignedWord: null,
       correctAnswer: null,
+      roundTimedOut: null,
       messages: [],
       isConnected: false,
     })
