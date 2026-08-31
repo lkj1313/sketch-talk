@@ -1,6 +1,7 @@
 import type {
   GameChatMessageEvent,
   GameCorrectAnswerEvent,
+  GameFinishedEvent,
   GameReconnectState,
   GameRoundStartedState,
   GameRoundTimedOutEvent,
@@ -31,6 +32,7 @@ type UseGameRealtimeResult = {
   assignedWord: string | null
   correctAnswer: GameCorrectAnswerEvent | null
   roundTimedOut: GameRoundTimedOutEvent | null
+  gameResult: GameFinishedEvent | null
   messages: GameChatMessageEvent[]
   isConnected: boolean
 }
@@ -46,6 +48,7 @@ export function useGameRealtime({
     useState<GameCorrectAnswerEvent | null>(null)
   const [roundTimedOut, setRoundTimedOut] =
     useState<GameRoundTimedOutEvent | null>(null)
+  const [gameResult, setGameResult] = useState<GameFinishedEvent | null>(null)
   const [messages, setMessages] = useState<GameChatMessageEvent[]>([])
   const [isConnected, setIsConnected] = useState(roomSocket.connected)
 
@@ -98,6 +101,7 @@ export function useGameRealtime({
       setAssignedWord(null)
       setCorrectAnswer(null)
       setRoundTimedOut(null)
+      setGameResult(null)
     }
 
     function handleWordAssigned(event: GameWordAssignedEvent): void {
@@ -140,6 +144,17 @@ export function useGameRealtime({
       setRoundTimedOut(event)
     }
 
+    function handleGameFinished(result: GameFinishedEvent): void {
+      if (result.gameSessionId !== gameId) {
+        return
+      }
+
+      setAssignedWord(null)
+      setCorrectAnswer(null)
+      setRoundTimedOut(null)
+      setGameResult(result)
+    }
+
     function handleRealtimeError(error: RealtimeErrorResponse): void {
       toast.add({
         title: '게임 연결 오류',
@@ -156,6 +171,7 @@ export function useGameRealtime({
     roomSocket.on(ROOM_SOCKET_EVENT.CORRECT_ANSWER, handleCorrectAnswer)
     roomSocket.on(ROOM_SOCKET_EVENT.ROUND_STARTED, handleRoundStarted)
     roomSocket.on(ROOM_SOCKET_EVENT.ROUND_TIMED_OUT, handleRoundTimedOut)
+    roomSocket.on(ROOM_SOCKET_EVENT.GAME_FINISHED, handleGameFinished)
     roomSocket.on(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
 
     if (roomSocket.connected) {
@@ -173,6 +189,7 @@ export function useGameRealtime({
       roomSocket.off(ROOM_SOCKET_EVENT.CORRECT_ANSWER, handleCorrectAnswer)
       roomSocket.off(ROOM_SOCKET_EVENT.ROUND_STARTED, handleRoundStarted)
       roomSocket.off(ROOM_SOCKET_EVENT.ROUND_TIMED_OUT, handleRoundTimedOut)
+      roomSocket.off(ROOM_SOCKET_EVENT.GAME_FINISHED, handleGameFinished)
       roomSocket.off(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
       disconnectRoomSocket()
     }
@@ -183,6 +200,7 @@ export function useGameRealtime({
     assignedWord,
     correctAnswer,
     roundTimedOut,
+    gameResult,
     messages,
     isConnected,
   }

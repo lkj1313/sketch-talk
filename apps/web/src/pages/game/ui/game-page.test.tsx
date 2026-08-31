@@ -62,6 +62,7 @@ describe('GamePage', () => {
       assignedWord: '사과',
       correctAnswer: null,
       roundTimedOut: null,
+      gameResult: null,
       messages: [],
       isConnected: true,
     })
@@ -121,6 +122,7 @@ describe('GamePage', () => {
       assignedWord: null,
       correctAnswer: null,
       roundTimedOut: null,
+      gameResult: null,
       messages: [
         {
           participant: { id: 'participant-id', nickname: '현재 참가자' },
@@ -137,12 +139,38 @@ describe('GamePage', () => {
     expect(screen.getByText('나')).toBeInTheDocument()
   })
 
+  it('게임 종료 결과를 받으면 최종 순위 화면을 표시한다', () => {
+    mocks.useGameRealtime.mockReturnValue({
+      gameState: null,
+      assignedWord: null,
+      correctAnswer: null,
+      roundTimedOut: null,
+      gameResult: {
+        gameSessionId: 'game-id',
+        scores: [
+          { participantId: 'participant-id', nickname: '현재 참가자', score: 300 },
+          { participantId: 'other-id', nickname: '다른 참가자', score: 500 },
+        ],
+        endedAt: '2026-08-31T10:10:00.000Z',
+      },
+      messages: [],
+      isConnected: true,
+    })
+
+    renderGamePage()
+
+    expect(screen.getByRole('heading', { name: '게임 종료' })).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: '최종 순위' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '채팅 메시지' })).not.toBeInTheDocument()
+  })
+
   it('게임 상태를 받기 전에는 로딩 상태를 표시한다', () => {
     mocks.useGameRealtime.mockReturnValue({
       gameState: null,
       assignedWord: null,
       correctAnswer: null,
       roundTimedOut: null,
+      gameResult: null,
       messages: [],
       isConnected: false,
     })

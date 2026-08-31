@@ -4,6 +4,7 @@ import { useCurrentRoomParticipant } from '@/entities/room'
 import { sendGameMessage } from '@/features/game-chat-send'
 import { useGameRealtime } from '@/features/game-realtime'
 import { GameChat } from '@/widgets/game-chat'
+import { GameResultScreen } from '@/widgets/game-result'
 import { GameScreen } from '@/widgets/game-screen'
 
 import { useRoundCountdown } from '../model/use-round-countdown'
@@ -17,6 +18,7 @@ export function GamePage() {
     assignedWord,
     correctAnswer,
     roundTimedOut,
+    gameResult,
     messages,
     isConnected,
   } = useGameRealtime({
@@ -24,6 +26,15 @@ export function GamePage() {
     gameId,
   })
   const remainingSeconds = useRoundCountdown(gameState?.expiresAt)
+
+  if (gameResult) {
+    return (
+      <GameResultScreen
+        currentParticipantId={currentParticipantQuery.data?.id}
+        result={gameResult}
+      />
+    )
+  }
 
   const isChatDisabled = !isConnected || !gameState
 

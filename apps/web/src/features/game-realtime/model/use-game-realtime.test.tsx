@@ -1,6 +1,7 @@
 import type {
   GameChatMessageEvent,
   GameCorrectAnswerEvent,
+  GameFinishedEvent,
   GameReconnectState,
   GameRoundStartedState,
   GameRoundTimedOutEvent,
@@ -41,6 +42,7 @@ vi.mock('@/shared/api', () => ({
     CORRECT_ANSWER: 'game:correct-answer',
     ROUND_STARTED: 'game:round-started',
     ROUND_TIMED_OUT: 'game:round-timed-out',
+    GAME_FINISHED: 'game:finished',
     WORD_ASSIGNED: 'game:word-assigned',
     ERROR: 'realtime:error',
   },
@@ -301,6 +303,37 @@ describe('useGameRealtime', () => {
     unmount()
     expect(mocks.socket.off).toHaveBeenCalledWith(
       'game:round-timed-out',
+      expect.any(Function),
+    )
+  })
+
+  it('현재 게임의 종료 결과를 저장한다', () => {
+    const { result, unmount } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const gameResult = {
+      gameSessionId: 'game-id',
+      scores: [
+        { participantId: 'participant-id', nickname: '참가자', score: 300 },
+      ],
+      endedAt: '2026-08-31T10:10:00.000Z',
+    } satisfies GameFinishedEvent
+
+    receive('game:finished', {
+      ...gameResult,
+      gameSessionId: 'different-game-id',
+    } satisfies GameFinishedEvent)
+    expect(result.current.gameResult).toBeNull()
+
+    receive('game:finished', gameResult)
+    expect(result.current.gameResult).toEqual(gameResult)
+    expect(result.current.assignedWord).toBeNull()
+    expect(result.current.correctAnswer).toBeNull()
+    expect(result.current.roundTimedOut).toBeNull()
+
+    unmount()
+    expect(mocks.socket.off).toHaveBeenCalledWith(
+      'game:finished',
       expect.any(Function),
     )
   })
