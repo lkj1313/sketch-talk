@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   refetchGuestSession: vi.fn(),
 }))
 
-vi.mock('@/features/auth/session', () => ({
+vi.mock('@/features/auth-session', () => ({
   setupAuthInterceptors: mocks.setupAuthInterceptors,
   useRestoreSession: mocks.useRestoreSession,
 }))

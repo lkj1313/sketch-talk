@@ -21,19 +21,19 @@ vi.mock('@/entities/room', () => ({
   useCurrentRoomParticipant: mocks.useCurrentRoomParticipant,
 }))
 
-vi.mock('@/features/room/join', () => ({
+vi.mock('@/features/room-join', () => ({
   JoinRoomForm: ({ code }: { code: string }) => (
     <p>참가 양식 {code}</p>
   ),
 }))
 
-vi.mock('@/features/room/manage', () => ({
+vi.mock('@/features/room-manage', () => ({
   RoomActions: ({ participant }: { participant: { nickname: string } }) => (
     <p>방 관리 {participant.nickname}</p>
   ),
 }))
 
-vi.mock('@/features/room/realtime', () => ({
+vi.mock('@/features/room-realtime', () => ({
   useRoomRealtime: mocks.useRoomRealtime,
 }))
 

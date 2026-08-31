@@ -3,7 +3,7 @@ import { useEffect, type PropsWithChildren } from 'react'
 import {
   setupAuthInterceptors,
   useRestoreSession,
-} from '@/features/auth/session'
+} from '@/features/auth-session'
 import { useSessionStore } from '@/entities/session'
 import { useGuestSession } from '@/features/guest-session'
 import { Button, Spinner } from '@/shared/ui'

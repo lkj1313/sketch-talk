@@ -21,7 +21,7 @@ vi.mock('@/entities/room', async (importOriginal) => {
   }
 })
 
-vi.mock('@/features/room/create', () => ({
+vi.mock('@/features/room-create', () => ({
   CreateRoomDialog: () => <button type="button">방 만들기</button>,
 }))
 
