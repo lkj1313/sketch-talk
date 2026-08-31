@@ -1,5 +1,6 @@
 import type {
   GameChatMessageEvent,
+  GameCorrectAnswerEvent,
   GameReconnectState,
   GameWordAssignedEvent,
 } from '@sketch-talk/contracts'
@@ -35,6 +36,7 @@ vi.mock('@/shared/api', () => ({
     SUBSCRIBE: 'room:subscribe',
     GAME_STATE: 'game:state',
     CHAT_MESSAGE: 'game:chat-message',
+    CORRECT_ANSWER: 'game:correct-answer',
     WORD_ASSIGNED: 'game:word-assigned',
     ERROR: 'realtime:error',
   },
@@ -135,6 +137,44 @@ describe('useGameRealtime', () => {
     unmount()
     expect(mocks.socket.off).toHaveBeenCalledWith(
       'game:chat-message',
+      expect.any(Function),
+    )
+  })
+
+  it('현재 게임의 정답 결과만 저장한다', () => {
+    const { result, unmount } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const correctAnswer = {
+      gameSessionId: 'game-id',
+      roundId: 'round-id',
+      answer: '사과',
+      guesser: {
+        id: 'guesser-id',
+        nickname: '정답자',
+        awardedScore: 100,
+      },
+      drawer: {
+        id: 'drawer-id',
+        nickname: '출제자',
+        awardedScore: 50,
+      },
+    } satisfies GameCorrectAnswerEvent
+
+    expect(result.current.correctAnswer).toBeNull()
+
+    receive('game:correct-answer', {
+      ...correctAnswer,
+      gameSessionId: 'different-game-id',
+    } satisfies GameCorrectAnswerEvent)
+    expect(result.current.correctAnswer).toBeNull()
+
+    receive('game:correct-answer', correctAnswer)
+    expect(result.current.correctAnswer).toEqual(correctAnswer)
+
+    unmount()
+    expect(mocks.socket.off).toHaveBeenCalledWith(
+      'game:correct-answer',
       expect.any(Function),
     )
   })
