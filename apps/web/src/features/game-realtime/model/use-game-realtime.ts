@@ -2,6 +2,7 @@ import type {
   GameChatMessageEvent,
   GameCorrectAnswerEvent,
   GameReconnectState,
+  GameRoundStartedState,
   GameWordAssignedEvent,
   RealtimeErrorResponse,
   RoomSubscribeRequest,
@@ -102,6 +103,15 @@ export function useGameRealtime({
       setCorrectAnswer(event)
     }
 
+    function handleRoundStarted(round: GameRoundStartedState): void {
+      if (round.gameSessionId !== gameId) {
+        return
+      }
+
+      setGameState(round)
+      setAssignedWord(null)
+    }
+
     function handleRealtimeError(error: RealtimeErrorResponse): void {
       toast.add({
         title: '게임 연결 오류',
@@ -116,6 +126,7 @@ export function useGameRealtime({
     roomSocket.on(ROOM_SOCKET_EVENT.WORD_ASSIGNED, handleWordAssigned)
     roomSocket.on(ROOM_SOCKET_EVENT.CHAT_MESSAGE, handleChatMessage)
     roomSocket.on(ROOM_SOCKET_EVENT.CORRECT_ANSWER, handleCorrectAnswer)
+    roomSocket.on(ROOM_SOCKET_EVENT.ROUND_STARTED, handleRoundStarted)
     roomSocket.on(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
 
     if (roomSocket.connected) {
@@ -131,6 +142,7 @@ export function useGameRealtime({
       roomSocket.off(ROOM_SOCKET_EVENT.WORD_ASSIGNED, handleWordAssigned)
       roomSocket.off(ROOM_SOCKET_EVENT.CHAT_MESSAGE, handleChatMessage)
       roomSocket.off(ROOM_SOCKET_EVENT.CORRECT_ANSWER, handleCorrectAnswer)
+      roomSocket.off(ROOM_SOCKET_EVENT.ROUND_STARTED, handleRoundStarted)
       roomSocket.off(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
       disconnectRoomSocket()
     }

@@ -2,6 +2,7 @@ import type {
   GameChatMessageEvent,
   GameCorrectAnswerEvent,
   GameReconnectState,
+  GameRoundStartedState,
   GameWordAssignedEvent,
 } from '@sketch-talk/contracts'
 import { act, renderHook } from '@testing-library/react'
@@ -37,6 +38,7 @@ vi.mock('@/shared/api', () => ({
     GAME_STATE: 'game:state',
     CHAT_MESSAGE: 'game:chat-message',
     CORRECT_ANSWER: 'game:correct-answer',
+    ROUND_STARTED: 'game:round-started',
     WORD_ASSIGNED: 'game:word-assigned',
     ERROR: 'realtime:error',
   },
@@ -212,6 +214,61 @@ describe('useGameRealtime', () => {
     })
 
     expect(result.current.correctAnswer).toBeNull()
+  })
+
+  it('현재 게임의 다음 라운드 상태를 반영하고 이전 제시어를 제거한다', () => {
+    const { result, unmount } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const nextRound = {
+      ...gameState,
+      roundId: 'next-round-id',
+      roundNumber: 2,
+      drawer: { id: 'next-drawer-id', nickname: '다음 출제자' },
+      difficulty: 'MEDIUM',
+      startedAt: '2026-08-27T00:02:00.000Z',
+      expiresAt: '2026-08-27T00:04:00.000Z',
+    } satisfies GameRoundStartedState
+
+    receive('game:state', gameState)
+    receive('game:word-assigned', {
+      gameSessionId: 'game-id',
+      roundId: 'round-id',
+      answer: '사과',
+    } satisfies GameWordAssignedEvent)
+    receive('game:correct-answer', {
+      gameSessionId: 'game-id',
+      roundId: 'round-id',
+      answer: '사과',
+      guesser: {
+        id: 'guesser-id',
+        nickname: '정답자',
+        awardedScore: 100,
+      },
+      drawer: {
+        id: 'drawer-id',
+        nickname: '출제자',
+        awardedScore: 50,
+      },
+    } satisfies GameCorrectAnswerEvent)
+
+    receive('game:round-started', {
+      ...nextRound,
+      gameSessionId: 'different-game-id',
+    } satisfies GameRoundStartedState)
+    expect(result.current.gameState).toEqual(gameState)
+    expect(result.current.assignedWord).toBe('사과')
+
+    receive('game:round-started', nextRound)
+    expect(result.current.gameState).toEqual(nextRound)
+    expect(result.current.assignedWord).toBeNull()
+    expect(result.current.correctAnswer?.answer).toBe('사과')
+
+    unmount()
+    expect(mocks.socket.off).toHaveBeenCalledWith(
+      'game:round-started',
+      expect.any(Function),
+    )
   })
 
   it('연결 종료와 서버 오류를 화면 상태 및 토스트에 반영한다', () => {

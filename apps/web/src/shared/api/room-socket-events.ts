@@ -10,6 +10,7 @@ export const ROOM_SOCKET_EVENT = {
   MESSAGE: 'game:message',
   CHAT_MESSAGE: 'game:chat-message',
   CORRECT_ANSWER: 'game:correct-answer',
+  ROUND_STARTED: 'game:round-started',
   WORD_ASSIGNED: 'game:word-assigned',
   ERROR: 'realtime:error',
 } as const
