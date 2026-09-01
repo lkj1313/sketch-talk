@@ -6,10 +6,11 @@ import { cn } from '@/shared/lib/cn'
 import { useDrawingBoard } from '../model/use-drawing-board'
 
 export type DrawingBoardProps = {
+  roundId: string
   className?: string
 }
 
-export function DrawingBoard({ className }: DrawingBoardProps) {
+export function DrawingBoard({ roundId, className }: DrawingBoardProps) {
   const titleId = useId()
   const instructionId = useId()
   const {
@@ -17,7 +18,7 @@ export function DrawingBoard({ className }: DrawingBoardProps) {
     finishStroke,
     handlePointerDown,
     handlePointerMove,
-  } = useDrawingBoard()
+  } = useDrawingBoard({ roundId })
 
   return (
     <section

@@ -17,6 +17,9 @@ const meta = {
       </main>
     ),
   ],
+  args: {
+    roundId: 'preview-round-id',
+  },
 } satisfies Meta<typeof DrawingBoard>
 
 export default meta

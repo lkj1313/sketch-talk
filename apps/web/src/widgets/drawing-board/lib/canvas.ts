@@ -1,7 +1,4 @@
-import type { DrawingPoint } from '@sketch-talk/contracts'
-
-const PEN_COLOR = '#111827'
-const PEN_WIDTH = 4
+import type { DrawingPoint, DrawingStroke } from '@sketch-talk/contracts'
 
 export function getNormalizedPoint(
   canvas: HTMLCanvasElement,
@@ -22,7 +19,7 @@ export function getNormalizedPoint(
 
 export function resizeCanvas(
   canvas: HTMLCanvasElement,
-  completedStrokes: DrawingPoint[][],
+  completedStrokes: DrawingStroke[],
 ): void {
   const bounds = canvas.getBoundingClientRect()
   const pixelRatio = window.devicePixelRatio || 1
@@ -37,35 +34,36 @@ export function resizeCanvas(
   }
 
   context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-  completedStrokes.forEach((points) => {
-    drawStroke(context, points, bounds.width, bounds.height)
+  completedStrokes.forEach((stroke) => {
+    drawStroke(context, stroke, bounds.width, bounds.height)
   })
 }
 
 export function drawStroke(
   context: CanvasRenderingContext2D,
-  points: DrawingPoint[],
+  stroke: DrawingStroke,
   canvasWidth: number,
   canvasHeight: number,
 ): void {
-  const firstPoint = points[0]
+  const firstPoint = stroke.points[0]
 
   if (!firstPoint) {
     return
   }
 
-  context.strokeStyle = PEN_COLOR
-  context.fillStyle = PEN_COLOR
-  context.lineWidth = PEN_WIDTH
+  context.globalCompositeOperation = 'source-over'
+  context.strokeStyle = stroke.color
+  context.fillStyle = stroke.color
+  context.lineWidth = stroke.width
   context.lineCap = 'round'
   context.lineJoin = 'round'
 
-  if (points.length === 1) {
+  if (stroke.points.length === 1) {
     context.beginPath()
     context.arc(
       firstPoint.x * canvasWidth,
       firstPoint.y * canvasHeight,
-      PEN_WIDTH / 2,
+      stroke.width / 2,
       0,
       Math.PI * 2,
     )
@@ -76,7 +74,7 @@ export function drawStroke(
   context.beginPath()
   context.moveTo(firstPoint.x * canvasWidth, firstPoint.y * canvasHeight)
 
-  points.slice(1).forEach((point) => {
+  stroke.points.slice(1).forEach((point) => {
     context.lineTo(point.x * canvasWidth, point.y * canvasHeight)
   })
 

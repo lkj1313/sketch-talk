@@ -1,4 +1,4 @@
-import type { DrawingPoint } from '@sketch-talk/contracts'
+import type { DrawingStroke } from '@sketch-talk/contracts'
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
@@ -11,11 +11,18 @@ import {
   resizeCanvas,
 } from '../lib/canvas'
 
-export function useDrawingBoard() {
+const DEFAULT_PEN_COLOR = '#111827'
+const DEFAULT_PEN_WIDTH = 4
+
+type UseDrawingBoardOptions = {
+  roundId: string
+}
+
+export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activePointerIdRef = useRef<number | null>(null)
-  const currentPointsRef = useRef<DrawingPoint[]>([])
-  const completedStrokesRef = useRef<DrawingPoint[][]>([])
+  const currentStrokeRef = useRef<DrawingStroke | null>(null)
+  const completedStrokesRef = useRef<DrawingStroke[]>([])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -23,6 +30,10 @@ export function useDrawingBoard() {
     if (!canvas) {
       return
     }
+
+    activePointerIdRef.current = null
+    currentStrokeRef.current = null
+    completedStrokesRef.current = []
 
     const handleResize = (): void => {
       resizeCanvas(canvas, completedStrokesRef.current)
@@ -33,7 +44,7 @@ export function useDrawingBoard() {
     handleResize()
 
     return () => resizeObserver.disconnect()
-  }, [])
+  }, [roundId])
 
   function handlePointerDown(
     event: ReactPointerEvent<HTMLCanvasElement>,
@@ -53,14 +64,26 @@ export function useDrawingBoard() {
     }
 
     activePointerIdRef.current = event.pointerId
-    currentPointsRef.current = [point]
+    currentStrokeRef.current = {
+      roundId,
+      strokeId: crypto.randomUUID(),
+      tool: 'PEN',
+      color: DEFAULT_PEN_COLOR,
+      width: DEFAULT_PEN_WIDTH,
+      points: [point],
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
 
     const context = event.currentTarget.getContext('2d')
     const bounds = event.currentTarget.getBoundingClientRect()
 
-    if (context) {
-      drawStroke(context, [point], bounds.width, bounds.height)
+    if (context && currentStrokeRef.current) {
+      drawStroke(
+        context,
+        currentStrokeRef.current,
+        bounds.width,
+        bounds.height,
+      )
     }
   }
 
@@ -76,13 +99,14 @@ export function useDrawingBoard() {
       event.clientX,
       event.clientY,
     )
-    const previousPoint = currentPointsRef.current.at(-1)
+    const currentStroke = currentStrokeRef.current
+    const previousPoint = currentStroke?.points.at(-1)
 
-    if (!point || !previousPoint) {
+    if (!point || !currentStroke || !previousPoint) {
       return
     }
 
-    currentPointsRef.current.push(point)
+    currentStroke.points.push(point)
 
     const context = event.currentTarget.getContext('2d')
     const bounds = event.currentTarget.getBoundingClientRect()
@@ -90,7 +114,10 @@ export function useDrawingBoard() {
     if (context) {
       drawStroke(
         context,
-        [previousPoint, point],
+        {
+          ...currentStroke,
+          points: [previousPoint, point],
+        },
         bounds.width,
         bounds.height,
       )
@@ -102,11 +129,13 @@ export function useDrawingBoard() {
       return
     }
 
-    if (currentPointsRef.current.length > 0) {
-      completedStrokesRef.current.push(currentPointsRef.current)
+    const currentStroke = currentStrokeRef.current
+
+    if (currentStroke && currentStroke.points.length > 0) {
+      completedStrokesRef.current.push(currentStroke)
     }
 
-    currentPointsRef.current = []
+    currentStrokeRef.current = null
     activePointerIdRef.current = null
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
