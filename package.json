@@ -7,6 +7,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test",
+    "test:e2e:web": "pnpm --filter web test:e2e",
     "storybook": "pnpm --filter web storybook",
     "storybook:build": "pnpm --filter web storybook:build",
     "docker:up": "docker compose up -d --wait",

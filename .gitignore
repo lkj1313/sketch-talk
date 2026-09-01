@@ -3,6 +3,8 @@ node_modules/
 dist/
 coverage/
 storybook-static/
+playwright-report/
+test-results/
 *.tsbuildinfo
 
 .env
