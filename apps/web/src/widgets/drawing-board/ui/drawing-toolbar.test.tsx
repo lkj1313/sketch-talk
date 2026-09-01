@@ -8,8 +8,10 @@ describe('DrawingToolbar', () => {
     render(
       <DrawingToolbar
         color="#111827"
+        tool="PEN"
         width={4}
         onColorChange={vi.fn()}
+        onToolChange={vi.fn()}
         onWidthChange={vi.fn()}
       />,
     )
@@ -31,8 +33,10 @@ describe('DrawingToolbar', () => {
     render(
       <DrawingToolbar
         color="#111827"
+        tool="PEN"
         width={4}
         onColorChange={onColorChange}
+        onToolChange={vi.fn()}
         onWidthChange={onWidthChange}
       />,
     )
@@ -42,5 +46,41 @@ describe('DrawingToolbar', () => {
 
     expect(onColorChange).toHaveBeenCalledWith('#ef4444')
     expect(onWidthChange).toHaveBeenCalledWith(8)
+  })
+
+  it('지우개 선택을 전달하고 펜 설정을 비활성화한다', () => {
+    const onToolChange = vi.fn()
+
+    const { rerender } = render(
+      <DrawingToolbar
+        color="#111827"
+        tool="PEN"
+        width={4}
+        onColorChange={vi.fn()}
+        onToolChange={onToolChange}
+        onWidthChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '지우개' }))
+    expect(onToolChange).toHaveBeenCalledWith('ERASER')
+
+    rerender(
+      <DrawingToolbar
+        color="#111827"
+        tool="ERASER"
+        width={4}
+        onColorChange={vi.fn()}
+        onToolChange={onToolChange}
+        onWidthChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '지우개' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: '검정 색상' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '보통' })).toBeDisabled()
   })
 })

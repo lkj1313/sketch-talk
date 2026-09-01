@@ -51,7 +51,8 @@ export function drawStroke(
     return
   }
 
-  context.globalCompositeOperation = 'source-over'
+  context.globalCompositeOperation =
+    stroke.tool === 'ERASER' ? 'destination-out' : 'source-over'
   context.strokeStyle = stroke.color
   context.fillStyle = stroke.color
   context.lineWidth = stroke.width

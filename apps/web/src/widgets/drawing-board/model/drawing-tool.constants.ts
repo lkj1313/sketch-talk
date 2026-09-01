@@ -17,3 +17,4 @@ export type DrawingWidth = (typeof DRAWING_WIDTHS)[number]['value']
 
 export const DEFAULT_DRAWING_COLOR: DrawingColor = '#111827'
 export const DEFAULT_DRAWING_WIDTH: DrawingWidth = 4
+export const DRAWING_ERASER_WIDTH = 20
