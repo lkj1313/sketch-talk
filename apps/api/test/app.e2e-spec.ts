@@ -1,6 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import { createHash } from 'node:crypto';
+import type {
+  DrawingClearRequest,
+  DrawingStroke,
+  DrawingSyncEvent,
+  GameChatMessageEvent,
+  GameCorrectAnswerEvent,
+  GameFinishedEvent,
+  GameReconnectState,
+  GameRoundStartedState,
+  GameWordAssignedEvent,
+  RoomGameStartedEvent,
+} from '@sketch-talk/contracts';
+import { createHash, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { io, type Socket } from 'socket.io-client';
@@ -24,9 +36,19 @@ describe('AppController (e2e)', () => {
   let hostSocket: Socket;
   let joiningGuestSocket: Socket;
   let memberSocket: Socket;
+  let reconnectSocket: Socket;
   let publicRoomCode: string;
   let privateRoomCode: string;
+  let hostParticipantId: string;
+  let joiningGuestParticipantId: string;
+  let gameSessionId: string;
+  let firstRoundId: string;
+  let firstAnswer: string;
+  let firstStroke: DrawingStroke;
+  let secondRoundId: string;
+  let secondAnswer: string;
   const createdRoomIds: string[] = [];
+  const createdGameSessionIds: string[] = [];
   const signupEmail = `e2e-${Date.now()}@example.com`;
   const signupNickname = `e2e-${Date.now()}`;
 
@@ -147,6 +169,7 @@ describe('AppController (e2e)', () => {
       },
     });
     publicRoomCode = response.body.data.code as string;
+    hostParticipantId = response.body.data.host.id as string;
     createdRoomIds.push(response.body.data.id as string);
   });
 
@@ -266,6 +289,7 @@ describe('AppController (e2e)', () => {
         },
       },
     });
+    joiningGuestParticipantId = response.body.data.participant.id as string;
     await expect(joinedEventPromise).resolves.toMatchObject({
       roomCode: publicRoomCode,
       participant: {
@@ -636,10 +660,14 @@ describe('AppController (e2e)', () => {
       .send({ isReady: true })
       .expect(200);
 
-    const gameStartedPromise = waitForSocketEvent<{
-      roomCode: string;
-      room: { status: string };
-    }>(joiningGuestSocket, 'room:game-started');
+    const gameStartedPromise = waitForSocketEvent<RoomGameStartedEvent>(
+      joiningGuestSocket,
+      'room:game-started',
+    );
+    const wordAssignedPromise = waitForSocketEvent<GameWordAssignedEvent>(
+      hostSocket,
+      'game:word-assigned',
+    );
     await guestAgent
       .post(`/api/v1/rooms/${publicRoomCode.toLowerCase()}/start`)
       .expect(201)
@@ -654,12 +682,35 @@ describe('AppController (e2e)', () => {
           },
         });
       });
-    await expect(gameStartedPromise).resolves.toMatchObject({
+    const [gameStarted, wordAssigned] = await Promise.all([
+      gameStartedPromise,
+      wordAssignedPromise,
+    ]);
+
+    expect(gameStarted).toMatchObject({
       roomCode: publicRoomCode,
       room: {
         status: 'PLAYING',
       },
+      game: {
+        roundNumber: 1,
+        totalRounds: 2,
+        drawer: {
+          id: hostParticipantId,
+          nickname: '게스트123',
+        },
+      },
     });
+    expect(wordAssigned).toMatchObject({
+      gameSessionId: gameStarted.game.gameSessionId,
+      roundId: gameStarted.game.roundId,
+      answer: expect.any(String),
+    });
+
+    gameSessionId = gameStarted.game.gameSessionId;
+    firstRoundId = gameStarted.game.roundId;
+    firstAnswer = wordAssigned.answer;
+    createdGameSessionIds.push(gameSessionId);
   });
 
   it('이미 시작된 방은 다시 시작할 수 없다', () => {
@@ -674,6 +725,297 @@ describe('AppController (e2e)', () => {
           message: '대기 중인 방만 게임을 시작할 수 있습니다.',
         },
       });
+  });
+
+  it('출제자가 아닌 참가자의 그림을 거절한다', async () => {
+    const errorPromise = waitForSocketEvent<{
+      code: string;
+      message: string;
+    }>(joiningGuestSocket, 'realtime:error');
+
+    joiningGuestSocket.emit('drawing:stroke', {
+      roundId: firstRoundId,
+      strokeId: randomUUID(),
+      tool: 'PEN',
+      color: '#111827',
+      width: 8,
+      points: [
+        { x: 0.1, y: 0.2 },
+        { x: 0.3, y: 0.4 },
+      ],
+    } satisfies DrawingStroke);
+
+    await expect(errorPromise).resolves.toEqual({
+      code: 'GAME_DRAWING_NOT_ALLOWED',
+      message: '현재 출제자만 그림을 그릴 수 있습니다.',
+    });
+  });
+
+  it('첫 번째 라운드의 그림을 다른 참가자에게 전달한다', async () => {
+    firstStroke = {
+      roundId: firstRoundId,
+      strokeId: randomUUID(),
+      tool: 'PEN',
+      color: '#ef4444',
+      width: 8,
+      points: [
+        { x: 0.1, y: 0.2 },
+        { x: 0.4, y: 0.5 },
+      ],
+    };
+    const strokeAddedPromise = waitForSocketEvent<DrawingStroke>(
+      joiningGuestSocket,
+      'drawing:stroke-added',
+    );
+
+    hostSocket.emit('drawing:stroke', firstStroke);
+
+    await expect(strokeAddedPromise).resolves.toEqual(firstStroke);
+  });
+
+  it('중간에 다시 접속하면 현재 게임과 그림을 동기화한다', async () => {
+    reconnectSocket = createRoomSocket(serverUrl, {
+      cookie: joiningGuestCookie,
+    });
+    await waitForSocketEvent(reconnectSocket, 'connect');
+    const gameStatePromise = waitForSocketEvent<GameReconnectState>(
+      reconnectSocket,
+      'game:state',
+    );
+    const drawingSyncPromise = waitForSocketEvent<DrawingSyncEvent>(
+      reconnectSocket,
+      'drawing:sync',
+    );
+
+    reconnectSocket.emit('room:subscribe', { code: publicRoomCode });
+
+    const [gameState, drawingSync] = await Promise.all([
+      gameStatePromise,
+      drawingSyncPromise,
+    ]);
+    expect(gameState).toMatchObject({
+      gameSessionId,
+      roundId: firstRoundId,
+      roundNumber: 1,
+      totalRounds: 2,
+    });
+    expect(drawingSync).toEqual({
+      roundId: firstRoundId,
+      strokes: [firstStroke],
+    });
+    reconnectSocket.disconnect();
+  });
+
+  it('전체 지우기를 모든 참가자에게 전달한다', async () => {
+    const request: DrawingClearRequest = { roundId: firstRoundId };
+    const drawingClearedPromise = waitForSocketEvent<DrawingClearRequest>(
+      joiningGuestSocket,
+      'drawing:cleared',
+    );
+
+    hostSocket.emit('drawing:clear', request);
+
+    await expect(drawingClearedPromise).resolves.toEqual(request);
+  });
+
+  it('오답은 일반 채팅 메시지로 전달한다', async () => {
+    const chatMessagePromise = waitForSocketEvent<GameChatMessageEvent>(
+      hostSocket,
+      'game:chat-message',
+    );
+
+    joiningGuestSocket.emit('game:message', {
+      message: '정답이 아닌 채팅',
+    });
+
+    const chatMessage = await chatMessagePromise;
+    expect(chatMessage).toMatchObject({
+      participant: {
+        id: joiningGuestParticipantId,
+        nickname: '참가자123',
+      },
+      message: '정답이 아닌 채팅',
+      sentAt: expect.any(String),
+    });
+  });
+
+  it('첫 번째 정답을 처리하고 다음 출제자로 라운드를 전환한다', async () => {
+    const correctAnswerPromise = waitForSocketEvent<GameCorrectAnswerEvent>(
+      hostSocket,
+      'game:correct-answer',
+    );
+    const roundStartedPromise = waitForSocketEvent<GameRoundStartedState>(
+      hostSocket,
+      'game:round-started',
+    );
+    const wordAssignedPromise = waitForSocketEvent<GameWordAssignedEvent>(
+      joiningGuestSocket,
+      'game:word-assigned',
+    );
+
+    joiningGuestSocket.emit('game:message', {
+      message: `  ${firstAnswer}  `,
+    });
+
+    const [correctAnswer, roundStarted, wordAssigned] = await Promise.all([
+      correctAnswerPromise,
+      roundStartedPromise,
+      wordAssignedPromise,
+    ]);
+    expect(correctAnswer).toMatchObject({
+      gameSessionId,
+      roundId: firstRoundId,
+      answer: firstAnswer,
+      guesser: {
+        id: joiningGuestParticipantId,
+        nickname: '참가자123',
+        awardedScore: expect.any(Number),
+      },
+      drawer: {
+        id: hostParticipantId,
+        nickname: '게스트123',
+        awardedScore: expect.any(Number),
+      },
+    });
+    expect(correctAnswer.guesser.awardedScore).toBeGreaterThan(0);
+    expect(correctAnswer.drawer.awardedScore).toBeGreaterThan(0);
+    expect(roundStarted).toMatchObject({
+      gameSessionId,
+      roundNumber: 2,
+      totalRounds: 2,
+      drawer: {
+        id: joiningGuestParticipantId,
+        nickname: '참가자123',
+      },
+    });
+    expect(wordAssigned).toMatchObject({
+      gameSessionId,
+      roundId: roundStarted.roundId,
+      answer: expect.any(String),
+    });
+
+    secondRoundId = roundStarted.roundId;
+    secondAnswer = wordAssigned.answer;
+  });
+
+  it('다음 라운드에서 이전 그림 기록을 초기화한다', async () => {
+    reconnectSocket = createRoomSocket(serverUrl, { cookie: guestCookie });
+    await waitForSocketEvent(reconnectSocket, 'connect');
+    const gameStatePromise = waitForSocketEvent<GameReconnectState>(
+      reconnectSocket,
+      'game:state',
+    );
+    const drawingSyncPromise = waitForSocketEvent<DrawingSyncEvent>(
+      reconnectSocket,
+      'drawing:sync',
+    );
+
+    reconnectSocket.emit('room:subscribe', { code: publicRoomCode });
+
+    const [gameState, drawingSync] = await Promise.all([
+      gameStatePromise,
+      drawingSyncPromise,
+    ]);
+    expect(gameState).toMatchObject({
+      gameSessionId,
+      roundId: secondRoundId,
+      roundNumber: 2,
+    });
+    expect(drawingSync).toEqual({
+      roundId: secondRoundId,
+      strokes: [],
+    });
+    reconnectSocket.disconnect();
+  });
+
+  it('두 번째 라운드의 출제자도 그림을 전달할 수 있다', async () => {
+    const stroke: DrawingStroke = {
+      roundId: secondRoundId,
+      strokeId: randomUUID(),
+      tool: 'ERASER',
+      color: '#2563eb',
+      width: 16,
+      points: [
+        { x: 0.7, y: 0.2 },
+        { x: 0.6, y: 0.4 },
+      ],
+    };
+    const strokeAddedPromise = waitForSocketEvent<DrawingStroke>(
+      hostSocket,
+      'drawing:stroke-added',
+    );
+
+    joiningGuestSocket.emit('drawing:stroke', stroke);
+
+    await expect(strokeAddedPromise).resolves.toEqual(stroke);
+  });
+
+  it('마지막 정답 후 게임을 종료하고 결과를 DB에 저장한다', async () => {
+    const correctAnswerPromise = waitForSocketEvent<GameCorrectAnswerEvent>(
+      joiningGuestSocket,
+      'game:correct-answer',
+    );
+    const gameFinishedPromise = waitForSocketEvent<GameFinishedEvent>(
+      joiningGuestSocket,
+      'game:finished',
+    );
+
+    hostSocket.emit('game:message', { message: secondAnswer });
+
+    const [correctAnswer, gameFinished] = await Promise.all([
+      correctAnswerPromise,
+      gameFinishedPromise,
+    ]);
+    expect(correctAnswer).toMatchObject({
+      gameSessionId,
+      roundId: secondRoundId,
+      answer: secondAnswer,
+      guesser: { id: hostParticipantId },
+      drawer: { id: joiningGuestParticipantId },
+    });
+    expect(gameFinished).toMatchObject({
+      gameSessionId,
+      scores: expect.arrayContaining([
+        expect.objectContaining({ participantId: hostParticipantId }),
+        expect.objectContaining({
+          participantId: joiningGuestParticipantId,
+        }),
+      ]),
+      endedAt: expect.any(String),
+    });
+    expect(gameFinished.scores).toHaveLength(2);
+
+    const savedGame = await prisma.gameSession.findUnique({
+      where: { id: gameSessionId },
+      include: {
+        room: true,
+        rounds: {
+          orderBy: { roundNumber: 'asc' },
+        },
+      },
+    });
+
+    expect(savedGame).toMatchObject({
+      status: 'FINISHED',
+      currentRoundNumber: 2,
+      room: {
+        status: 'FINISHED',
+      },
+      rounds: [
+        {
+          id: firstRoundId,
+          roundNumber: 1,
+          status: 'FINISHED',
+          guessedByParticipantId: joiningGuestParticipantId,
+        },
+        {
+          id: secondRoundId,
+          roundNumber: 2,
+          status: 'FINISHED',
+          guessedByParticipantId: hostParticipantId,
+        },
+      ],
+    });
   });
 
   it('방장이 나가면 남은 참가자에게 방장을 넘긴다', async () => {
@@ -870,6 +1212,14 @@ describe('AppController (e2e)', () => {
     hostSocket?.disconnect();
     joiningGuestSocket?.disconnect();
     memberSocket?.disconnect();
+    reconnectSocket?.disconnect();
+    await prisma.gameSession.deleteMany({
+      where: {
+        id: {
+          in: createdGameSessionIds,
+        },
+      },
+    });
     await prisma.room.deleteMany({
       where: {
         id: {
