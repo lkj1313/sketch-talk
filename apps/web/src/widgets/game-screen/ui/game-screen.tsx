@@ -3,25 +3,26 @@ import type {
   GameReconnectState,
   GameRoundSkippedEvent,
   GameRoundTimedOutEvent,
-} from '@sketch-talk/contracts'
+} from "@sketch-talk/contracts";
+import { WifiOffIcon } from "lucide-react";
 
-import { Spinner } from '@/shared/ui'
+import { Spinner } from "@/shared/ui";
 
-import { getDifficultyLabel } from '../lib/get-difficulty-label'
-import { CorrectAnswerNotice } from './correct-answer-notice'
-import { RoundSkippedNotice } from './round-skipped-notice'
-import { RoundTimedOutNotice } from './round-timed-out-notice'
+import { getDifficultyLabel } from "../lib/get-difficulty-label";
+import { CorrectAnswerNotice } from "./correct-answer-notice";
+import { RoundSkippedNotice } from "./round-skipped-notice";
+import { RoundTimedOutNotice } from "./round-timed-out-notice";
 
 export type GameScreenProps = {
-  roomCode: string
-  gameState: GameReconnectState | null
-  assignedWord: string | null
-  correctAnswer: GameCorrectAnswerEvent | null
-  roundTimedOut: GameRoundTimedOutEvent | null
-  roundSkipped: GameRoundSkippedEvent | null
-  isConnected: boolean
-  remainingSeconds: number
-}
+  roomCode: string;
+  gameState: GameReconnectState | null;
+  assignedWord: string | null;
+  correctAnswer: GameCorrectAnswerEvent | null;
+  roundTimedOut: GameRoundTimedOutEvent | null;
+  roundSkipped: GameRoundSkippedEvent | null;
+  isConnected: boolean;
+  remainingSeconds: number;
+};
 
 export function GameScreen({
   roomCode,
@@ -45,11 +46,27 @@ export function GameScreen({
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <span
             aria-hidden="true"
-            className={`size-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}
+            className={`size-2 rounded-full ${isConnected ? "bg-emerald-500" : "bg-amber-500"}`}
           />
-          {isConnected ? '실시간 연결됨' : '실시간 연결 중'}
+          {isConnected ? "실시간 연결됨" : "실시간 연결 중"}
         </p>
       </header>
+
+      {!isConnected && (
+        <div
+          role="status"
+          aria-label="실시간 연결 상태"
+          className="mt-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950"
+        >
+          <WifiOffIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold">실시간 연결이 끊어졌습니다.</p>
+            <p className="mt-1 text-xs text-amber-800">
+              자동으로 다시 연결하고 있습니다. 잠시만 기다려주세요.
+            </p>
+          </div>
+        </div>
+      )}
 
       {correctAnswer && <CorrectAnswerNotice result={correctAnswer} />}
       {roundTimedOut && <RoundTimedOutNotice result={roundTimedOut} />}
@@ -92,13 +109,13 @@ export function GameScreen({
         </div>
       )}
     </section>
-  )
+  );
 }
 
 type GameStateItemProps = {
-  label: string
-  value: string
-}
+  label: string;
+  value: string;
+};
 
 function GameStateItem({ label, value }: GameStateItemProps) {
   return (
@@ -106,5 +123,5 @@ function GameStateItem({ label, value }: GameStateItemProps) {
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
     </div>
-  )
+  );
 }

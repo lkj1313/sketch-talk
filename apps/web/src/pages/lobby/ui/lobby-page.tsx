@@ -19,7 +19,7 @@ export function LobbyPage() {
               참여할 방을 선택해 그림 게임을 시작해보세요.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <CreateRoomDialog />
             {isAuthenticated ? (
               <>
