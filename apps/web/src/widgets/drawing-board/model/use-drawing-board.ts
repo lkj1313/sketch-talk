@@ -1,4 +1,4 @@
-import type { DrawingStroke } from '@sketch-talk/contracts'
+import type { DrawingStroke, DrawingTool } from '@sketch-talk/contracts'
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
@@ -14,6 +14,7 @@ import {
 import {
   DEFAULT_DRAWING_COLOR,
   DEFAULT_DRAWING_WIDTH,
+  DRAWING_ERASER_WIDTH,
   type DrawingColor,
   type DrawingWidth,
 } from './drawing-tool.constants'
@@ -24,6 +25,7 @@ type UseDrawingBoardOptions = {
 
 export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
   const [color, setColor] = useState<DrawingColor>(DEFAULT_DRAWING_COLOR)
+  const [tool, setTool] = useState<DrawingTool>('PEN')
   const [width, setWidth] = useState<DrawingWidth>(DEFAULT_DRAWING_WIDTH)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activePointerIdRef = useRef<number | null>(null)
@@ -73,9 +75,9 @@ export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
     currentStrokeRef.current = {
       roundId,
       strokeId: crypto.randomUUID(),
-      tool: 'PEN',
+      tool,
       color,
-      width,
+      width: tool === 'ERASER' ? DRAWING_ERASER_WIDTH : width,
       points: [point],
     }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -156,7 +158,9 @@ export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
     handlePointerDown,
     handlePointerMove,
     setColor,
+    setTool,
     setWidth,
+    tool,
     width,
   }
 }

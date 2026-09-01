@@ -21,7 +21,9 @@ export function DrawingBoard({ roundId, className }: DrawingBoardProps) {
     handlePointerDown,
     handlePointerMove,
     setColor,
+    setTool,
     setWidth,
+    tool,
     width,
   } = useDrawingBoard({ roundId })
 
@@ -42,8 +44,10 @@ export function DrawingBoard({ roundId, className }: DrawingBoardProps) {
 
       <DrawingToolbar
         color={color}
+        tool={tool}
         width={width}
         onColorChange={setColor}
+        onToolChange={setTool}
         onWidthChange={setWidth}
       />
 
