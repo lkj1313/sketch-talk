@@ -16,6 +16,7 @@ import type {
   RealtimeErrorResponse,
 } from '@sketch-talk/contracts';
 import type { Namespace } from 'socket.io';
+import { getWebOrigins } from '@/app.setup';
 import { AppException } from '@/common/exceptions/app.exception';
 import { GAME_MESSAGE_MAX_LENGTH } from '@/games/constants/game.constants';
 import {
@@ -60,7 +61,7 @@ import { RoomsService } from '@/rooms/rooms.service';
   namespace: ROOM_SOCKET_NAMESPACE,
   path: ROOM_SOCKET_PATH,
   cors: {
-    origin: 'http://localhost:5173',
+    origin: getWebOrigins(),
     credentials: true,
   },
 })

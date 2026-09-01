@@ -52,6 +52,24 @@ export function resizeCanvas(
   })
 }
 
+export function redrawCanvas(
+  canvas: HTMLCanvasElement,
+  completedStrokes: DrawingStroke[],
+): void {
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return
+  }
+
+  const bounds = canvas.getBoundingClientRect()
+
+  clearCanvas(canvas)
+  completedStrokes.forEach((stroke) => {
+    drawStroke(context, stroke, bounds.width, bounds.height)
+  })
+}
+
 export function drawStroke(
   context: CanvasRenderingContext2D,
   stroke: DrawingStroke,

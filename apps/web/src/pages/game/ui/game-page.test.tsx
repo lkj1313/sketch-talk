@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GamePage } from './game-page'
 
 const mocks = vi.hoisted(() => ({
+  drawingBoardProps: vi.fn(),
   emit: vi.fn(),
+  sendDrawingClear: vi.fn(),
+  sendDrawingStroke: vi.fn(),
   useCurrentRoomParticipant: vi.fn(),
   useGameRealtime: vi.fn(),
 }))
@@ -16,6 +19,18 @@ vi.mock('@/entities/room', () => ({
 
 vi.mock('@/features/game-realtime', () => ({
   useGameRealtime: mocks.useGameRealtime,
+}))
+
+vi.mock('@/widgets/drawing-board', () => ({
+  DrawingBoard: (props: { canDraw: boolean; roundId: string }) => {
+    mocks.drawingBoardProps(props)
+
+    return (
+      <div aria-label="게임 그림판">
+        {props.canDraw ? '그림판 조작 가능' : '그림판 관전 중'}
+      </div>
+    )
+  },
 }))
 
 vi.mock('@/shared/api', () => ({
@@ -65,7 +80,10 @@ describe('GamePage', () => {
       roundSkipped: null,
       gameResult: null,
       messages: [],
+      drawingStrokes: [],
       isConnected: true,
+      sendDrawingClear: mocks.sendDrawingClear,
+      sendDrawingStroke: mocks.sendDrawingStroke,
     })
   })
 
@@ -92,6 +110,32 @@ describe('GamePage', () => {
     expect(screen.getByText('120초')).toBeInTheDocument()
     expect(screen.getByText('사과')).toBeInTheDocument()
     expect(screen.getByText('실시간 연결됨')).toBeInTheDocument()
+    expect(screen.getByText('그림판 관전 중')).toBeInTheDocument()
+  })
+
+  it('현재 참가자가 출제자이면 그림판 조작과 소켓 전송을 연결한다', () => {
+    mocks.useCurrentRoomParticipant.mockReturnValue({
+      data: { id: 'drawer-id' },
+    })
+
+    renderGamePage()
+
+    expect(screen.getByText('그림판 조작 가능')).toBeInTheDocument()
+    expect(mocks.drawingBoardProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canDraw: true,
+        roundId: 'round-id',
+        strokes: [],
+        onStrokeComplete: mocks.sendDrawingStroke,
+      }),
+    )
+
+    const drawingBoardProps = mocks.drawingBoardProps.mock.lastCall?.[0] as {
+      onClear: () => void
+    }
+    drawingBoardProps.onClear()
+
+    expect(mocks.sendDrawingClear).toHaveBeenCalledWith('round-id')
   })
 
   it('입력한 채팅 메시지를 게임 소켓으로 전송한다', () => {

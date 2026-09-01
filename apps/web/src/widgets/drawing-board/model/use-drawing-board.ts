@@ -10,6 +10,7 @@ import {
   clearCanvas,
   drawStroke,
   getNormalizedPoint,
+  redrawCanvas,
   resizeCanvas,
 } from '../lib/canvas'
 import {
@@ -22,10 +23,19 @@ import {
 
 type UseDrawingBoardOptions = {
   roundId: string
+  canDraw: boolean
+  strokes: DrawingStroke[]
   onClear?: () => void
+  onStrokeComplete?: (stroke: DrawingStroke) => void
 }
 
-export function useDrawingBoard({ roundId, onClear }: UseDrawingBoardOptions) {
+export function useDrawingBoard({
+  roundId,
+  canDraw,
+  strokes,
+  onClear,
+  onStrokeComplete,
+}: UseDrawingBoardOptions) {
   const [color, setColor] = useState<DrawingColor>(DEFAULT_DRAWING_COLOR)
   const [tool, setTool] = useState<DrawingTool>('PEN')
   const [width, setWidth] = useState<DrawingWidth>(DEFAULT_DRAWING_WIDTH)
@@ -41,10 +51,6 @@ export function useDrawingBoard({ roundId, onClear }: UseDrawingBoardOptions) {
       return
     }
 
-    activePointerIdRef.current = null
-    currentStrokeRef.current = null
-    completedStrokesRef.current = []
-
     const handleResize = (): void => {
       resizeCanvas(canvas, completedStrokesRef.current)
     }
@@ -54,12 +60,26 @@ export function useDrawingBoard({ roundId, onClear }: UseDrawingBoardOptions) {
     handleResize()
 
     return () => resizeObserver.disconnect()
-  }, [roundId])
+  }, [])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+
+    activePointerIdRef.current = null
+    currentStrokeRef.current = null
+    completedStrokesRef.current = strokes.filter(
+      (stroke) => stroke.roundId === roundId,
+    )
+
+    if (canvas) {
+      redrawCanvas(canvas, completedStrokesRef.current)
+    }
+  }, [roundId, strokes])
 
   function handlePointerDown(
     event: ReactPointerEvent<HTMLCanvasElement>,
   ): void {
-    if (activePointerIdRef.current !== null) {
+    if (!canDraw || activePointerIdRef.current !== null) {
       return
     }
 
@@ -143,6 +163,7 @@ export function useDrawingBoard({ roundId, onClear }: UseDrawingBoardOptions) {
 
     if (currentStroke && currentStroke.points.length > 0) {
       completedStrokesRef.current.push(currentStroke)
+      onStrokeComplete?.(currentStroke)
     }
 
     currentStrokeRef.current = null
@@ -154,6 +175,10 @@ export function useDrawingBoard({ roundId, onClear }: UseDrawingBoardOptions) {
   }
 
   function clearDrawing(): void {
+    if (!canDraw) {
+      return
+    }
+
     const canvas = canvasRef.current
     const activePointerId = activePointerIdRef.current
 
