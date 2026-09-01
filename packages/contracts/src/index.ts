@@ -33,6 +33,11 @@ export type {
   WordDifficulty,
 } from "./game.js";
 export type {
+  MemberGameHistory,
+  MemberGameRecordResponse,
+  MemberGameStats,
+} from "./game-record.js";
+export type {
   RealtimeErrorResponse,
   RoomGameStartedEvent,
   RoomHostChangedEvent,

@@ -1,9 +1,11 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
+import { AuthenticatedRoute } from "@/app/routes/authenticated-route";
 import { GamePage } from "@/pages/game";
 import { HomePage } from "@/pages/home";
 import { LobbyPage } from "@/pages/lobby";
 import { LoginPage } from "@/pages/login";
+import { ProfilePage } from "@/pages/profile";
 import { RoomPage } from "@/pages/room";
 import { SignupPage } from "@/pages/signup";
 import { GuestOnlyRoute } from "@/app/routes/guest-only-route";
@@ -29,6 +31,15 @@ const router = createBrowserRouter([
   {
     path: "/lobby",
     element: <LobbyPage />,
+  },
+  {
+    element: <AuthenticatedRoute />,
+    children: [
+      {
+        path: "/me",
+        element: <ProfilePage />,
+      },
+    ],
   },
   {
     path: "/rooms/:roomCode",

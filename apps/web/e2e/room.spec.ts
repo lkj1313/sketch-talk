@@ -1,6 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
-import { cleanupRoomTestData, createGameTestWords } from "./support/database";
+import {
+  cleanupAuthTestData,
+  cleanupRoomTestData,
+  createGameTestWords,
+} from "./support/database";
 
 const GUEST_TOKEN_COOKIE_NAME = "guestToken";
 const API_COOKIE_URL = "http://localhost:3000/api/v1";
@@ -16,6 +22,8 @@ async function getGuestToken(
 
 async function drawLine(page: Page): Promise<void> {
   const canvas = page.getByLabel("게임 그림판");
+
+  await canvas.scrollIntoViewIfNeeded();
   const bounds = await canvas.boundingBox();
 
   if (!bounds) {
@@ -91,14 +99,17 @@ async function sendChatMessage(page: Page, message: string): Promise<void> {
   await page.getByRole("button", { name: "메시지 전송" }).click();
 }
 
-test("두 명의 비회원이 그림과 채팅으로 게임을 완료한다", async ({
+test("회원과 비회원이 게임을 완료하고 회원 기록을 확인한다", async ({
   browser,
 }) => {
   const hostContext = await browser.newContext();
   const participantContext = await browser.newContext();
   const hostPage = await hostContext.newPage();
   const participantPage = await participantContext.newPage();
-  const hostNickname = "Playwright방장";
+  const identifier = randomUUID().slice(0, 10);
+  const hostEmail = `playwright-room-${identifier}@example.com`;
+  const hostPassword = "Playwright1234!";
+  const hostNickname = `Playwright방장-${identifier}`;
   const participantNickname = "Playwright참가자";
   const roomTitle = "Playwright 게임방";
   let wordIds: string[] = [];
@@ -108,13 +119,23 @@ test("두 명의 비회원이 그림과 채팅으로 게임을 완료한다", as
 
   try {
     wordIds = await createGameTestWords();
-    await hostPage.goto("/lobby");
+
+    await hostPage.goto("/signup");
+    await hostPage.getByLabel("이메일").fill(hostEmail);
+    await hostPage.getByLabel("비밀번호").fill(hostPassword);
+    await hostPage.getByLabel("닉네임").fill(hostNickname);
+    await hostPage.getByRole("button", { name: "회원가입" }).click();
+    await expect(hostPage).toHaveURL(/\/login$/);
+    await hostPage.getByLabel("이메일").fill(hostEmail);
+    await hostPage.getByLabel("비밀번호").fill(hostPassword);
+    await hostPage.getByRole("button", { name: "로그인" }).click();
+    await expect(hostPage).toHaveURL(/\/lobby$/);
+
     await expect(
       hostPage.getByRole("heading", { name: "방 목록" }),
     ).toBeVisible();
     await hostPage.getByRole("button", { name: "방 만들기" }).click();
     await hostPage.getByLabel("방 제목").fill(roomTitle);
-    await hostPage.getByLabel("닉네임").fill(hostNickname);
     await hostPage.getByLabel("최대 인원").selectOption("2");
     await hostPage.getByRole("button", { name: "방 만들기" }).last().click();
 
@@ -206,6 +227,15 @@ test("두 명의 비회원이 그림과 채팅으로 게임을 완료한다", as
     await expect(
       participantPage.getByRole("link", { name: "로비로 이동" }),
     ).toBeVisible();
+
+    await hostPage.getByRole("link", { name: "로비로 이동" }).click();
+    await hostPage.getByRole("link", { name: "내 기록" }).click();
+
+    await expect(hostPage).toHaveURL(/\/me$/);
+    await expect(hostPage.getByText(roomTitle)).toBeVisible();
+    await expect(
+      hostPage.getByText("플레이").locator("..").getByText("1회"),
+    ).toBeVisible();
   } finally {
     hostGuestToken = await getGuestToken(hostContext);
     participantGuestToken = await getGuestToken(participantContext);
@@ -215,5 +245,6 @@ test("두 명의 비회원이 그림과 채팅으로 게임을 완료한다", as
       guestTokens: [hostGuestToken, participantGuestToken],
       wordIds,
     });
+    await cleanupAuthTestData(hostEmail);
   }
 });

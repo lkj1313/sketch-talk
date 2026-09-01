@@ -9,16 +9,17 @@ datasource db {
 }
 
 model User {
-  id              String           @id @default(uuid()) @db.Uuid
-  email           String           @unique @db.VarChar(320)
-  passwordHash    String           @db.VarChar(255)
-  nickname        String           @unique @db.VarChar(30)
+  id              String             @id @default(uuid()) @db.Uuid
+  email           String             @unique @db.VarChar(320)
+  passwordHash    String             @db.VarChar(255)
+  nickname        String             @unique @db.VarChar(30)
   avatarUrl       String?
   lastLoginAt     DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
   authSessions    AuthSession[]
   roomParticipant RoomParticipant?
+  gameResults     GamePlayerResult[]
 }
 
 model AuthSession {
@@ -119,21 +120,39 @@ model RoomParticipant {
 }
 
 model GameSession {
-  id                 String            @id @default(uuid()) @db.Uuid
-  roomId             String?           @db.Uuid
-  roomCode           String            @db.VarChar(8)
-  roomTitle          String            @db.VarChar(50)
-  status             GameSessionStatus @default(PLAYING)
-  totalRounds        Int               @default(10) @db.SmallInt
-  currentRoundNumber Int               @default(0) @db.SmallInt
-  startedAt          DateTime          @default(now())
+  id                 String             @id @default(uuid()) @db.Uuid
+  roomId             String?            @db.Uuid
+  roomCode           String             @db.VarChar(8)
+  roomTitle          String             @db.VarChar(50)
+  status             GameSessionStatus  @default(PLAYING)
+  totalRounds        Int                @default(10) @db.SmallInt
+  currentRoundNumber Int                @default(0) @db.SmallInt
+  startedAt          DateTime           @default(now())
   endedAt            DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  room               Room?             @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  room               Room?              @relation(fields: [roomId], references: [id], onDelete: SetNull)
   rounds             GameRound[]
+  playerResults      GamePlayerResult[]
 
   @@index([roomId, status, startedAt])
+}
+
+model GamePlayerResult {
+  id                    String      @id @default(uuid()) @db.Uuid
+  gameSessionId         String      @db.Uuid
+  userId                String?     @db.Uuid
+  participantIdSnapshot String      @db.Uuid
+  nicknameSnapshot      String      @db.VarChar(30)
+  score                 Int
+  rank                  Int         @db.SmallInt
+  createdAt             DateTime    @default(now())
+  gameSession           GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  user                  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([gameSessionId, participantIdSnapshot])
+  @@index([userId, createdAt])
+  @@index([gameSessionId, rank])
 }
 
 model GameRound {
