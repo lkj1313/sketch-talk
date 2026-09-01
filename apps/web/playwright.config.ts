@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const WEB_SERVER_URL = "http://127.0.0.1:4173";
+const API_SERVER_URL = "http://localhost:3000/api/v1";
+const WEB_SERVER_URL = "http://localhost:5173";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -20,9 +21,23 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: "pnpm dev --host 127.0.0.1 --port 4173",
-    url: WEB_SERVER_URL,
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    {
+      command: "pnpm --dir ../api start",
+      url: API_SERVER_URL,
+      env: {
+        NODE_ENV: "test",
+        WEB_ORIGIN: WEB_SERVER_URL,
+        WORD_AUTO_GENERATION_ENABLED: "false",
+      },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command: "pnpm dev --host localhost --port 5173 --strictPort",
+      url: WEB_SERVER_URL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+  ],
 });
