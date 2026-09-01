@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 import { cleanupRoomTestData, createGameTestWords } from "./support/database";
 
@@ -14,7 +14,86 @@ async function getGuestToken(
     ?.value;
 }
 
-test("두 명의 비회원이 방에 참가하고 게임을 시작한다", async ({ browser }) => {
+async function drawLine(page: Page): Promise<void> {
+  const canvas = page.getByLabel("게임 그림판");
+  const bounds = await canvas.boundingBox();
+
+  if (!bounds) {
+    throw new Error("그림판의 위치를 찾을 수 없습니다.");
+  }
+
+  await page.mouse.move(
+    bounds.x + bounds.width * 0.2,
+    bounds.y + bounds.height * 0.3,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    bounds.x + bounds.width * 0.5,
+    bounds.y + bounds.height * 0.5,
+    {
+      steps: 8,
+    },
+  );
+  await page.mouse.move(
+    bounds.x + bounds.width * 0.8,
+    bounds.y + bounds.height * 0.7,
+    {
+      steps: 8,
+    },
+  );
+  await page.mouse.up();
+}
+
+async function canvasHasDrawing(page: Page): Promise<boolean> {
+  return page
+    .getByLabel("게임 그림판")
+    .evaluate((canvas: HTMLCanvasElement) => {
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        return false;
+      }
+
+      const pixels = context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      ).data;
+
+      for (let index = 3; index < pixels.length; index += 4) {
+        if (pixels[index] !== 0) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+}
+
+async function getAssignedWord(page: Page): Promise<string> {
+  const word = await page
+    .getByText("제시어", { exact: true })
+    .locator("..")
+    .locator("p")
+    .nth(1)
+    .textContent();
+
+  if (!word?.trim()) {
+    throw new Error("출제자에게 전달된 제시어를 찾을 수 없습니다.");
+  }
+
+  return word.trim();
+}
+
+async function sendChatMessage(page: Page, message: string): Promise<void> {
+  await page.getByRole("textbox", { name: "채팅 메시지" }).fill(message);
+  await page.getByRole("button", { name: "메시지 전송" }).click();
+}
+
+test("두 명의 비회원이 그림과 채팅으로 게임을 완료한다", async ({
+  browser,
+}) => {
   const hostContext = await browser.newContext();
   const participantContext = await browser.newContext();
   const hostPage = await hostContext.newPage();
@@ -86,6 +165,47 @@ test("두 명의 비회원이 방에 참가하고 게임을 시작한다", async
     await expect(participantPage.getByText("실시간 연결됨")).toBeVisible();
     await expect(hostPage.getByText("제시어", { exact: true })).toBeVisible();
     await expect(participantPage.getByText("관전 중")).toBeVisible();
+
+    await drawLine(hostPage);
+
+    await expect.poll(() => canvasHasDrawing(participantPage)).toBe(true);
+
+    const ordinaryMessage = "Playwright 일반 채팅";
+    await sendChatMessage(participantPage, ordinaryMessage);
+    await expect(
+      hostPage.getByText(ordinaryMessage, { exact: true }),
+    ).toBeVisible();
+
+    const firstAnswer = await getAssignedWord(hostPage);
+    await sendChatMessage(participantPage, firstAnswer);
+
+    await expect(hostPage.getByText("2 / 2", { exact: true })).toBeVisible();
+    await expect(
+      participantPage.getByText("2 / 2", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      participantPage.getByText("제시어", { exact: true }),
+    ).toBeVisible();
+    await expect(hostPage.getByText("관전 중")).toBeVisible();
+
+    const secondAnswer = await getAssignedWord(participantPage);
+    await sendChatMessage(hostPage, secondAnswer);
+
+    await expect(
+      hostPage.getByRole("heading", { name: "게임 종료" }),
+    ).toBeVisible();
+    await expect(
+      participantPage.getByRole("heading", { name: "게임 종료" }),
+    ).toBeVisible();
+    await expect(
+      hostPage.getByRole("list", { name: "최종 순위" }),
+    ).toContainText(hostNickname);
+    await expect(
+      hostPage.getByRole("list", { name: "최종 순위" }),
+    ).toContainText(participantNickname);
+    await expect(
+      participantPage.getByRole("link", { name: "로비로 이동" }),
+    ).toBeVisible();
   } finally {
     hostGuestToken = await getGuestToken(hostContext);
     participantGuestToken = await getGuestToken(participantContext);
