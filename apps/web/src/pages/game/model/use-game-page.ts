@@ -14,10 +14,14 @@ export function useGamePage() {
     gameId,
   })
   const remainingSeconds = useRoundCountdown(realtime.gameState?.expiresAt)
+  const currentParticipantId = currentParticipantQuery.data?.id
 
   return {
     ...realtime,
-    currentParticipantId: currentParticipantQuery.data?.id,
+    currentParticipantId,
+    isDrawer:
+      Boolean(currentParticipantId) &&
+      currentParticipantId === realtime.gameState?.drawer.id,
     isChatDisabled: !realtime.isConnected || !realtime.gameState,
     remainingSeconds,
     roomCode: normalizedRoomCode,

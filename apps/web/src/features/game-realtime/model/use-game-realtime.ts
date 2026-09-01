@@ -1,4 +1,7 @@
 import type {
+  DrawingClearRequest,
+  DrawingStroke,
+  DrawingSyncEvent,
   GameChatMessageEvent,
   GameCorrectAnswerEvent,
   GameFinishedEvent,
@@ -36,7 +39,10 @@ type UseGameRealtimeResult = {
   roundSkipped: GameRoundSkippedEvent | null
   gameResult: GameFinishedEvent | null
   messages: GameChatMessageEvent[]
+  drawingStrokes: DrawingStroke[]
   isConnected: boolean
+  sendDrawingStroke: (stroke: DrawingStroke) => void
+  sendDrawingClear: (roundId: string) => void
 }
 
 export function useGameRealtime({
@@ -54,6 +60,7 @@ export function useGameRealtime({
     useState<GameRoundSkippedEvent | null>(null)
   const [gameResult, setGameResult] = useState<GameFinishedEvent | null>(null)
   const [messages, setMessages] = useState<GameChatMessageEvent[]>([])
+  const [drawingState, setDrawingState] = useState<DrawingSyncEvent | null>(null)
   const [isConnected, setIsConnected] = useState(roomSocket.connected)
 
   useEffect(() => {
@@ -119,6 +126,7 @@ export function useGameRealtime({
       setRoundTimedOut(null)
       setRoundSkipped(null)
       setGameResult(null)
+      setDrawingState({ roundId: state.roundId, strokes: [] })
     }
 
     function handleWordAssigned(event: GameWordAssignedEvent): void {
@@ -150,6 +158,7 @@ export function useGameRealtime({
 
       setGameState(round)
       setAssignedWord(null)
+      setDrawingState({ roundId: round.roundId, strokes: [] })
     }
 
     function handleRoundTimedOut(event: GameRoundTimedOutEvent): void {
@@ -184,6 +193,42 @@ export function useGameRealtime({
       setRoundTimedOut(null)
       setRoundSkipped(null)
       setGameResult(result)
+      setDrawingState(null)
+    }
+
+    function handleDrawingStrokeAdded(stroke: DrawingStroke): void {
+      setDrawingState((currentState) => {
+        if (!currentState || currentState.roundId !== stroke.roundId) {
+          return currentState
+        }
+
+        if (
+          currentState.strokes.some(
+            (currentStroke) => currentStroke.strokeId === stroke.strokeId,
+          )
+        ) {
+          return currentState
+        }
+
+        return {
+          ...currentState,
+          strokes: [...currentState.strokes, stroke],
+        }
+      })
+    }
+
+    function handleDrawingCleared(request: DrawingClearRequest): void {
+      setDrawingState((currentState) =>
+        currentState?.roundId === request.roundId
+          ? { roundId: request.roundId, strokes: [] }
+          : currentState,
+      )
+    }
+
+    function handleDrawingSync(sync: DrawingSyncEvent): void {
+      setDrawingState((currentState) =>
+        currentState?.roundId === sync.roundId ? sync : currentState,
+      )
     }
 
     function handleRealtimeError(error: RealtimeErrorResponse): void {
@@ -204,6 +249,12 @@ export function useGameRealtime({
     roomSocket.on(ROOM_SOCKET_EVENT.ROUND_TIMED_OUT, handleRoundTimedOut)
     roomSocket.on(ROOM_SOCKET_EVENT.ROUND_SKIPPED, handleRoundSkipped)
     roomSocket.on(ROOM_SOCKET_EVENT.GAME_FINISHED, handleGameFinished)
+    roomSocket.on(
+      ROOM_SOCKET_EVENT.DRAWING_STROKE_ADDED,
+      handleDrawingStrokeAdded,
+    )
+    roomSocket.on(ROOM_SOCKET_EVENT.DRAWING_CLEARED, handleDrawingCleared)
+    roomSocket.on(ROOM_SOCKET_EVENT.DRAWING_SYNC, handleDrawingSync)
     roomSocket.on(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
 
     if (roomSocket.connected) {
@@ -223,10 +274,24 @@ export function useGameRealtime({
       roomSocket.off(ROOM_SOCKET_EVENT.ROUND_TIMED_OUT, handleRoundTimedOut)
       roomSocket.off(ROOM_SOCKET_EVENT.ROUND_SKIPPED, handleRoundSkipped)
       roomSocket.off(ROOM_SOCKET_EVENT.GAME_FINISHED, handleGameFinished)
+      roomSocket.off(
+        ROOM_SOCKET_EVENT.DRAWING_STROKE_ADDED,
+        handleDrawingStrokeAdded,
+      )
+      roomSocket.off(ROOM_SOCKET_EVENT.DRAWING_CLEARED, handleDrawingCleared)
+      roomSocket.off(ROOM_SOCKET_EVENT.DRAWING_SYNC, handleDrawingSync)
       roomSocket.off(ROOM_SOCKET_EVENT.ERROR, handleRealtimeError)
       disconnectRoomSocket()
     }
   }, [accessToken, gameId, roomCode])
+
+  function sendDrawingStroke(stroke: DrawingStroke): void {
+    roomSocket.emit(ROOM_SOCKET_EVENT.DRAWING_STROKE, stroke)
+  }
+
+  function sendDrawingClear(roundId: string): void {
+    roomSocket.emit(ROOM_SOCKET_EVENT.DRAWING_CLEAR, { roundId })
+  }
 
   return {
     gameState,
@@ -236,6 +301,9 @@ export function useGameRealtime({
     roundSkipped,
     gameResult,
     messages,
+    drawingStrokes: drawingState?.strokes ?? [],
     isConnected,
+    sendDrawingStroke,
+    sendDrawingClear,
   }
 }

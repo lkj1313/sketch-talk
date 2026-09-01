@@ -1,4 +1,6 @@
 import type {
+  DrawingStroke,
+  DrawingSyncEvent,
   GameChatMessageEvent,
   GameCorrectAnswerEvent,
   GameFinishedEvent,
@@ -46,6 +48,11 @@ vi.mock('@/shared/api', () => ({
     ROUND_SKIPPED: 'game:round-skipped',
     GAME_FINISHED: 'game:finished',
     WORD_ASSIGNED: 'game:word-assigned',
+    DRAWING_STROKE: 'drawing:stroke',
+    DRAWING_STROKE_ADDED: 'drawing:stroke-added',
+    DRAWING_CLEAR: 'drawing:clear',
+    DRAWING_CLEARED: 'drawing:cleared',
+    DRAWING_SYNC: 'drawing:sync',
     ERROR: 'realtime:error',
   },
 }))
@@ -332,12 +339,117 @@ describe('useGameRealtime', () => {
     expect(result.current.assignedWord).toBeNull()
     expect(result.current.correctAnswer).toBeNull()
     expect(result.current.roundTimedOut).toBeNull()
+    expect(result.current.drawingStrokes).toEqual([])
 
     unmount()
     expect(mocks.socket.off).toHaveBeenCalledWith(
       'game:finished',
       expect.any(Function),
     )
+  })
+
+  it('그림 동기화와 새 선을 현재 라운드에만 반영한다', () => {
+    const { result, unmount } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const firstStroke = {
+      roundId: 'round-id',
+      strokeId: 'first-stroke-id',
+      tool: 'PEN',
+      color: '#111827',
+      width: 4,
+      points: [
+        { x: 0.1, y: 0.2 },
+        { x: 0.3, y: 0.4 },
+      ],
+    } satisfies DrawingStroke
+    const secondStroke = {
+      ...firstStroke,
+      strokeId: 'second-stroke-id',
+      color: '#ef4444',
+    } satisfies DrawingStroke
+
+    receive('game:state', gameState)
+    receive('drawing:sync', {
+      roundId: 'round-id',
+      strokes: [firstStroke],
+    } satisfies DrawingSyncEvent)
+
+    expect(result.current.drawingStrokes).toEqual([firstStroke])
+
+    receive('drawing:stroke-added', secondStroke)
+    receive('drawing:stroke-added', secondStroke)
+    receive('drawing:stroke-added', {
+      ...secondStroke,
+      roundId: 'different-round-id',
+      strokeId: 'different-round-stroke-id',
+    } satisfies DrawingStroke)
+
+    expect(result.current.drawingStrokes).toEqual([firstStroke, secondStroke])
+
+    unmount()
+    expect(mocks.socket.off).toHaveBeenCalledWith(
+      'drawing:sync',
+      expect.any(Function),
+    )
+  })
+
+  it('전체 지우기와 새 라운드를 그림 상태에 반영한다', () => {
+    const { result } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const stroke = {
+      roundId: 'round-id',
+      strokeId: 'stroke-id',
+      tool: 'PEN',
+      color: '#111827',
+      width: 4,
+      points: [{ x: 0.1, y: 0.2 }],
+    } satisfies DrawingStroke
+
+    receive('game:state', gameState)
+    receive('drawing:sync', {
+      roundId: 'round-id',
+      strokes: [stroke],
+    } satisfies DrawingSyncEvent)
+    receive('drawing:cleared', { roundId: 'different-round-id' })
+    expect(result.current.drawingStrokes).toEqual([stroke])
+
+    receive('drawing:cleared', { roundId: 'round-id' })
+    expect(result.current.drawingStrokes).toEqual([])
+
+    receive('game:round-started', {
+      ...gameState,
+      roundId: 'next-round-id',
+      roundNumber: 2,
+    } satisfies GameRoundStartedState)
+    receive('drawing:stroke-added', stroke)
+
+    expect(result.current.drawingStrokes).toEqual([])
+  })
+
+  it('완성된 선과 전체 지우기 요청을 서버로 전송한다', () => {
+    const { result } = renderHook(() =>
+      useGameRealtime({ roomCode: 'ABC234', gameId: 'game-id' }),
+    )
+    const stroke = {
+      roundId: 'round-id',
+      strokeId: 'stroke-id',
+      tool: 'ERASER',
+      color: '#111827',
+      width: 20,
+      points: [{ x: 0.5, y: 0.5 }],
+    } satisfies DrawingStroke
+
+    act(() => {
+      result.current.sendDrawingStroke(stroke)
+      result.current.sendDrawingClear('round-id')
+    })
+
+    expect(mocks.socket.emit).toHaveBeenCalledWith('drawing:stroke', stroke)
+    expect(mocks.socket.emit).toHaveBeenCalledWith('drawing:clear', {
+      roundId: 'round-id',
+    })
   })
 
   it('현재 라운드의 건너뛰기 결과를 저장하고 3초 후 제거한다', () => {

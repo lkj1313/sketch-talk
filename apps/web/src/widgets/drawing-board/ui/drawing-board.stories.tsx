@@ -19,6 +19,8 @@ const meta = {
   ],
   args: {
     roundId: 'preview-round-id',
+    canDraw: true,
+    strokes: [],
   },
 } satisfies Meta<typeof DrawingBoard>
 
@@ -27,3 +29,23 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const 기본: Story = {}
+
+export const 참가자화면: Story = {
+  args: {
+    canDraw: false,
+    strokes: [
+      {
+        roundId: 'preview-round-id',
+        strokeId: 'preview-stroke-id',
+        tool: 'PEN',
+        color: '#ef4444',
+        width: 8,
+        points: [
+          { x: 0.2, y: 0.3 },
+          { x: 0.4, y: 0.5 },
+          { x: 0.7, y: 0.25 },
+        ],
+      },
+    ],
+  },
+}

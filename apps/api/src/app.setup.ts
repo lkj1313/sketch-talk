@@ -10,9 +10,11 @@ import { GlobalExceptionFilter } from '@/common/filters/global-exception.filter'
 import { ResponseInterceptor } from '@/common/interceptors/response.interceptor';
 
 export function configureApp(app: INestApplication): void {
+  const webOrigins = getWebOrigins();
+
   app.use(cookieParser());
   app.enableCors({
-    origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+    origin: webOrigins,
     credentials: true,
   });
   app.setGlobalPrefix('api');
@@ -32,4 +34,11 @@ export function configureApp(app: INestApplication): void {
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.enableShutdownHooks();
+}
+
+export function getWebOrigins(): string[] {
+  return (process.env.WEB_ORIGIN ?? 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 }
