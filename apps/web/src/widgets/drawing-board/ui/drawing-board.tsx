@@ -4,6 +4,7 @@ import { useId } from 'react'
 import { cn } from '@/shared/lib/cn'
 
 import { useDrawingBoard } from '../model/use-drawing-board'
+import { DrawingToolbar } from './drawing-toolbar'
 
 export type DrawingBoardProps = {
   roundId: string
@@ -15,9 +16,13 @@ export function DrawingBoard({ roundId, className }: DrawingBoardProps) {
   const instructionId = useId()
   const {
     canvasRef,
+    color,
     finishStroke,
     handlePointerDown,
     handlePointerMove,
+    setColor,
+    setWidth,
+    width,
   } = useDrawingBoard({ roundId })
 
   return (
@@ -34,6 +39,13 @@ export function DrawingBoard({ roundId, className }: DrawingBoardProps) {
           그림판
         </h2>
       </header>
+
+      <DrawingToolbar
+        color={color}
+        width={width}
+        onColorChange={setColor}
+        onWidthChange={setWidth}
+      />
 
       <div className="aspect-[4/3] w-full bg-white">
         <p id={instructionId} className="sr-only">

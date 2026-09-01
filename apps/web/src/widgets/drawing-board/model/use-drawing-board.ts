@@ -3,6 +3,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
+  useState,
 } from 'react'
 
 import {
@@ -10,15 +11,20 @@ import {
   getNormalizedPoint,
   resizeCanvas,
 } from '../lib/canvas'
-
-const DEFAULT_PEN_COLOR = '#111827'
-const DEFAULT_PEN_WIDTH = 4
+import {
+  DEFAULT_DRAWING_COLOR,
+  DEFAULT_DRAWING_WIDTH,
+  type DrawingColor,
+  type DrawingWidth,
+} from './drawing-tool.constants'
 
 type UseDrawingBoardOptions = {
   roundId: string
 }
 
 export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
+  const [color, setColor] = useState<DrawingColor>(DEFAULT_DRAWING_COLOR)
+  const [width, setWidth] = useState<DrawingWidth>(DEFAULT_DRAWING_WIDTH)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activePointerIdRef = useRef<number | null>(null)
   const currentStrokeRef = useRef<DrawingStroke | null>(null)
@@ -68,8 +74,8 @@ export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
       roundId,
       strokeId: crypto.randomUUID(),
       tool: 'PEN',
-      color: DEFAULT_PEN_COLOR,
-      width: DEFAULT_PEN_WIDTH,
+      color,
+      width,
       points: [point],
     }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -145,8 +151,12 @@ export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
 
   return {
     canvasRef,
+    color,
     finishStroke,
     handlePointerDown,
     handlePointerMove,
+    setColor,
+    setWidth,
+    width,
   }
 }
