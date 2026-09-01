@@ -5,6 +5,7 @@ import { GamePage } from "@/pages/game";
 import { HomePage } from "@/pages/home";
 import { LobbyPage } from "@/pages/lobby";
 import { LoginPage } from "@/pages/login";
+import { NotFoundPage } from "@/pages/not-found";
 import { ProfilePage } from "@/pages/profile";
 import { RoomPage } from "@/pages/room";
 import { SignupPage } from "@/pages/signup";
@@ -48,6 +49,10 @@ const router = createBrowserRouter([
   {
     path: "/rooms/:roomCode/games/:gameId",
     element: <GamePage />,
+  },
+  {
+    path: "*",
+    element: <NotFoundPage />,
   },
 ]);
 

@@ -1,19 +1,20 @@
 import type {
   RoomDetailResponse,
   RoomParticipantResponse,
-} from '@sketch-talk/contracts'
-import { ArrowLeftIcon, LockIcon, UsersIcon } from 'lucide-react'
+} from "@sketch-talk/contracts";
+import { ArrowLeftIcon, LockIcon, UsersIcon } from "lucide-react";
 
-import { getRoomStatusLabel } from '@/entities/room'
-import { JoinRoomForm } from '@/features/room-join'
-import { RoomActions } from '@/features/room-manage'
-import { Button } from '@/shared/ui'
+import { getRoomStatusLabel } from "@/entities/room";
+import { CopyRoomInviteButton } from "@/features/room-invite-copy";
+import { JoinRoomForm } from "@/features/room-join";
+import { RoomActions } from "@/features/room-manage";
+import { Button } from "@/shared/ui";
 
 export type RoomDetailsProps = {
-  room: RoomDetailResponse
-  currentParticipant: RoomParticipantResponse | null
-  onBack: () => void
-}
+  room: RoomDetailResponse;
+  currentParticipant: RoomParticipantResponse | null;
+  onBack: () => void;
+};
 
 export function RoomDetails({
   room,
@@ -39,14 +40,17 @@ export function RoomDetails({
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <span className="font-mono font-semibold text-foreground">
-                방 코드 {room.code}
+              <span className="inline-flex items-center gap-2">
+                <span className="font-mono font-semibold text-foreground">
+                  방 코드 {room.code}
+                </span>
+                <CopyRoomInviteButton code={room.code} />
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <UsersIcon aria-hidden="true" className="size-4" />
                 {room.playerCount}/{room.maxPlayers}명
               </span>
-              {room.visibility === 'PRIVATE' && (
+              {room.visibility === "PRIVATE" && (
                 <span className="inline-flex items-center gap-1.5">
                   <LockIcon aria-hidden="true" className="size-4" />
                   비공개방
@@ -64,10 +68,9 @@ export function RoomDetails({
           )}
         </div>
 
-        {room.status === 'PLAYING' && (
+        {room.status === "PLAYING" && (
           <p className="mt-6 rounded-xl bg-muted p-4 text-sm font-medium">
-            게임이 진행 중입니다. 실시간 게임 화면 연결은 다음 단계에서
-            추가됩니다.
+            게임이 진행 중입니다. 참가 중이라면 게임 화면으로 자동 연결됩니다.
           </p>
         )}
 
@@ -82,7 +85,7 @@ export function RoomDetails({
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {room.participants.map((participant) => {
               const isCurrentParticipant =
-                participant.id === currentParticipant?.id
+                participant.id === currentParticipant?.id;
 
               return (
                 <li
@@ -115,7 +118,7 @@ export function RoomDetails({
                     )}
                   </div>
                 </li>
-              )
+              );
             })}
           </ul>
         </div>
@@ -127,5 +130,5 @@ export function RoomDetails({
         </div>
       )}
     </div>
-  )
+  );
 }

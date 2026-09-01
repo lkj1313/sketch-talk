@@ -1,10 +1,10 @@
-import { sendGameMessage } from '@/features/game-chat-send'
-import { DrawingBoard } from '@/widgets/drawing-board'
-import { GameChat } from '@/widgets/game-chat'
-import { GameResultScreen } from '@/widgets/game-result'
-import { GameScreen } from '@/widgets/game-screen'
+import { sendGameMessage } from "@/features/game-chat-send";
+import { DrawingBoard } from "@/widgets/drawing-board";
+import { GameChat } from "@/widgets/game-chat";
+import { GameResultScreen } from "@/widgets/game-result";
+import { GameScreen } from "@/widgets/game-screen";
 
-import { useGamePage } from '../model/use-game-page'
+import { useGamePage } from "../model/use-game-page";
 
 export function GamePage() {
   const {
@@ -24,7 +24,7 @@ export function GamePage() {
     roundTimedOut,
     sendDrawingClear,
     sendDrawingStroke,
-  } = useGamePage()
+  } = useGamePage();
 
   if (gameResult) {
     return (
@@ -32,13 +32,13 @@ export function GamePage() {
         currentParticipantId={currentParticipantId}
         result={gameResult}
       />
-    )
+    );
   }
 
   return (
-    <main className="min-h-screen bg-muted/30 px-4 py-8">
-      <div className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid min-w-0 gap-4">
+    <main className="min-h-screen bg-muted/30 px-3 py-4 sm:px-4 sm:py-8">
+      <div className="mx-auto grid w-full max-w-7xl gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid min-w-0 gap-3 sm:gap-4">
           <GameScreen
             roomCode={roomCode}
             gameState={gameState}
@@ -68,5 +68,5 @@ export function GamePage() {
         />
       </div>
     </main>
-  )
+  );
 }
