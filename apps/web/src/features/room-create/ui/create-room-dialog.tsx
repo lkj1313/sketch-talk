@@ -1,88 +1,23 @@
 import { Dialog } from '@base-ui/react/dialog'
-import type { CreateRoomRequest } from '@sketch-talk/contracts'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { XIcon } from 'lucide-react'
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router-dom'
 
-import { useSessionStore } from '@/entities/session'
-import { Button, Input, Label, toast } from '@/shared/ui'
+import { Button, Input, Label } from '@/shared/ui'
 
-import { getCreateRoomErrorMessage } from '../api/create-room'
-import {
-  getCreateRoomSchema,
-  type CreateRoomFormValues,
-} from '../model/create-room-schema'
-import { useCreateRoom } from '../model/use-create-room'
-
-const DEFAULT_VALUES: CreateRoomFormValues = {
-  title: '',
-  visibility: 'PUBLIC',
-  maxPlayers: 8,
-  allowMidJoin: true,
-  nickname: '',
-}
+import { useCreateRoomDialog } from '../model/use-create-room-dialog'
 
 const selectClassName =
   'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
 
 export function CreateRoomDialog() {
-  const navigate = useNavigate()
-  const accessToken = useSessionStore((state) => state.accessToken)
-  const isGuest = !accessToken
-  const [open, setOpen] = useState(false)
-  const createRoomMutation = useCreateRoom()
   const {
+    errors,
+    handleOpenChange,
+    isGuest,
+    isPending,
+    open,
     register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<CreateRoomFormValues>({
-    resolver: zodResolver(getCreateRoomSchema(isGuest)),
-    defaultValues: DEFAULT_VALUES,
-  })
-
-  function handleOpenChange(nextOpen: boolean): void {
-    if (createRoomMutation.isPending) {
-      return
-    }
-
-    setOpen(nextOpen)
-
-    if (!nextOpen) {
-      reset(DEFAULT_VALUES)
-    }
-  }
-
-  function onSubmit(values: CreateRoomFormValues): void {
-    const request: CreateRoomRequest = {
-      title: values.title,
-      visibility: values.visibility,
-      maxPlayers: values.maxPlayers,
-      allowMidJoin: values.allowMidJoin,
-      ...(isGuest ? { nickname: values.nickname } : {}),
-    }
-
-    createRoomMutation.mutate(request, {
-      onSuccess: (room) => {
-        setOpen(false)
-        reset(DEFAULT_VALUES)
-        toast.add({
-          title: '방을 만들었습니다.',
-          type: 'success',
-        })
-        void navigate(`/rooms/${room.code}`)
-      },
-      onError: (error) => {
-        toast.add({
-          title: '방을 만들지 못했습니다.',
-          description: getCreateRoomErrorMessage(error),
-          type: 'error',
-        })
-      },
-    })
-  }
+    submit,
+  } = useCreateRoomDialog()
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
@@ -102,14 +37,14 @@ export function CreateRoomDialog() {
             <Dialog.Close
               aria-label="방 만들기 닫기"
               className="absolute top-4 right-4 inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              disabled={createRoomMutation.isPending}
+              disabled={isPending}
             >
               <XIcon aria-hidden="true" className="size-4" />
             </Dialog.Close>
 
             <form
               className="mt-6 space-y-5"
-              onSubmit={handleSubmit(onSubmit)}
+              onSubmit={submit}
               noValidate
             >
               <div className="space-y-2">
@@ -190,12 +125,12 @@ export function CreateRoomDialog() {
               <div className="flex justify-end gap-2 pt-1">
                 <Dialog.Close
                   render={<Button type="button" variant="outline" />}
-                  disabled={createRoomMutation.isPending}
+                  disabled={isPending}
                 >
                   취소
                 </Dialog.Close>
-                <Button type="submit" disabled={createRoomMutation.isPending}>
-                  {createRoomMutation.isPending ? '만드는 중...' : '방 만들기'}
+                <Button type="submit" disabled={isPending}>
+                  {isPending ? '만드는 중...' : '방 만들기'}
                 </Button>
               </div>
             </form>

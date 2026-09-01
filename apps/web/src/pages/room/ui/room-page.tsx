@@ -1,37 +1,23 @@
-import { useNavigate, useParams } from 'react-router-dom'
-
-import { useCurrentRoomParticipant, useRoom } from '@/entities/room'
-import { useRoomRealtime } from '@/features/room-realtime'
 import { Button, Spinner } from '@/shared/ui'
 import { RoomDetails } from '@/widgets/room-details'
 
-const ROOM_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{6}$/
+import { useRoomPage } from '../model/use-room-page'
 
 export function RoomPage() {
-  const navigate = useNavigate()
-  const { roomCode: rawRoomCode = '' } = useParams()
-  const normalizedRoomCode = rawRoomCode.trim().toUpperCase()
-  const isValidRoomCode = ROOM_CODE_PATTERN.test(normalizedRoomCode)
-  const roomCode = isValidRoomCode ? normalizedRoomCode : ''
-  const roomQuery = useRoom(roomCode)
-  const currentParticipantQuery = useCurrentRoomParticipant(roomCode)
-  useRoomRealtime({
-    code: roomCode,
-    enabled: Boolean(currentParticipantQuery.data),
-  })
+  const roomPage = useRoomPage()
 
-  if (!isValidRoomCode) {
+  if (roomPage.status === 'invalid') {
     return (
       <RoomErrorState
         title="올바르지 않은 방 코드입니다."
         description="6자리 초대 코드를 다시 확인해주세요."
-        onRetry={() => void navigate('/lobby')}
+        onRetry={roomPage.goToLobby}
         retryLabel="로비로 이동"
       />
     )
   }
 
-  if (roomQuery.isPending || currentParticipantQuery.isPending) {
+  if (roomPage.status === 'loading') {
     return (
       <main className="flex min-h-screen items-center justify-center bg-muted/30">
         <Spinner className="size-8" aria-label="방 정보 불러오는 중" />
@@ -39,29 +25,23 @@ export function RoomPage() {
     )
   }
 
-  if (roomQuery.isError || currentParticipantQuery.isError) {
+  if (roomPage.status === 'error') {
     return (
       <RoomErrorState
         title="방 정보를 불러오지 못했습니다."
         description="방이 존재하는지 확인한 후 다시 시도해주세요."
-        onRetry={() => {
-          void roomQuery.refetch()
-          void currentParticipantQuery.refetch()
-        }}
+        onRetry={roomPage.retry}
         retryLabel="다시 시도"
       />
     )
   }
 
-  const room = roomQuery.data
-  const currentParticipant = currentParticipantQuery.data
-
   return (
     <main className="min-h-screen bg-muted/30">
       <RoomDetails
-        room={room}
-        currentParticipant={currentParticipant}
-        onBack={() => void navigate('/lobby')}
+        room={roomPage.room}
+        currentParticipant={roomPage.currentParticipant}
+        onBack={roomPage.goToLobby}
       />
     </main>
   )

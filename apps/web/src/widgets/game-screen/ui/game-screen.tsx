@@ -7,15 +7,10 @@ import type {
 
 import { Spinner } from '@/shared/ui'
 
+import { getDifficultyLabel } from '../lib/get-difficulty-label'
 import { CorrectAnswerNotice } from './correct-answer-notice'
 import { RoundSkippedNotice } from './round-skipped-notice'
 import { RoundTimedOutNotice } from './round-timed-out-notice'
-
-const DIFFICULTY_LABEL = {
-  EASY: '쉬움',
-  MEDIUM: '보통',
-  HARD: '어려움',
-} as const
 
 export type GameScreenProps = {
   roomCode: string
@@ -76,7 +71,7 @@ export function GameScreen({
           <GameStateItem label="출제자" value={gameState.drawer.nickname} />
           <GameStateItem
             label="난이도"
-            value={DIFFICULTY_LABEL[gameState.difficulty]}
+            value={getDifficultyLabel(gameState.difficulty)}
           />
           <GameStateItem label="남은 시간" value={`${remainingSeconds}초`} />
 

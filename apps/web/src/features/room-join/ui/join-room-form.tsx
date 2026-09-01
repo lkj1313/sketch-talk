@@ -1,53 +1,14 @@
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Button, Input, Label } from '@/shared/ui'
 
-import { useSessionStore } from '@/entities/session'
-import { Button, Input, Label, toast } from '@/shared/ui'
-
-import { getJoinRoomErrorMessage } from '../api/join-room'
-import {
-  getJoinRoomSchema,
-  type JoinRoomFormValues,
-} from '../model/join-room-schema'
-import { useJoinRoom } from '../model/use-join-room'
+import { useJoinRoomForm } from '../model/use-join-room-form'
 
 type JoinRoomFormProps = {
   code: string
 }
 
 export function JoinRoomForm({ code }: JoinRoomFormProps) {
-  const accessToken = useSessionStore((state) => state.accessToken)
-  const isGuest = !accessToken
-  const joinRoomMutation = useJoinRoom(code)
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<JoinRoomFormValues>({
-    resolver: zodResolver(getJoinRoomSchema(isGuest)),
-    defaultValues: { nickname: '' },
-  })
-
-  function onSubmit(values: JoinRoomFormValues): void {
-    joinRoomMutation.mutate(
-      isGuest ? { nickname: values.nickname } : {},
-      {
-        onSuccess: () => {
-          toast.add({
-            title: '방에 참가했습니다.',
-            type: 'success',
-          })
-        },
-        onError: (error) => {
-          toast.add({
-            title: '방에 참가하지 못했습니다.',
-            description: getJoinRoomErrorMessage(error),
-            type: 'error',
-          })
-        },
-      },
-    )
-  }
+  const { errors, isGuest, isPending, register, submit } =
+    useJoinRoomForm(code)
 
   return (
     <section className="rounded-2xl border bg-card p-6 shadow-sm">
@@ -58,7 +19,7 @@ export function JoinRoomForm({ code }: JoinRoomFormProps) {
         </p>
       </div>
 
-      <form className="mt-5 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+      <form className="mt-5 space-y-4" onSubmit={submit} noValidate>
         {isGuest && (
           <div className="space-y-2">
             <Label htmlFor="join-nickname">닉네임</Label>
@@ -79,9 +40,9 @@ export function JoinRoomForm({ code }: JoinRoomFormProps) {
         <Button
           className="w-full"
           type="submit"
-          disabled={joinRoomMutation.isPending}
+          disabled={isPending}
         >
-          {joinRoomMutation.isPending ? '참가하는 중...' : '참가하기'}
+          {isPending ? '참가하는 중...' : '참가하기'}
         </Button>
       </form>
     </section>

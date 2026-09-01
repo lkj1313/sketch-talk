@@ -1,21 +1,20 @@
-import type { RoomListStatus } from '@sketch-talk/contracts'
 import { RefreshCwIcon } from 'lucide-react'
-import { useState } from 'react'
 
-import { RoomCard, useRooms } from '@/entities/room'
+import { RoomCard } from '@/entities/room'
 import { Button, Spinner } from '@/shared/ui'
 
-const PAGE_SIZE = 12
+import { useRoomList } from '../model/use-room-list'
 
 export function RoomList() {
-  const [status, setStatus] = useState<RoomListStatus>('WAITING')
-  const [page, setPage] = useState(1)
-  const roomsQuery = useRooms({ page, pageSize: PAGE_SIZE, status })
-
-  function changeStatus(nextStatus: RoomListStatus): void {
-    setStatus(nextStatus)
-    setPage(1)
-  }
+  const {
+    changeStatus,
+    goToNextPage,
+    goToPreviousPage,
+    page,
+    refetch,
+    roomsQuery,
+    status,
+  } = useRoomList()
 
   return (
     <section aria-labelledby="room-list-heading">
@@ -46,7 +45,7 @@ export function RoomList() {
           type="button"
           variant="outline"
           disabled={roomsQuery.isFetching}
-          onClick={() => void roomsQuery.refetch()}
+          onClick={refetch}
         >
           <RefreshCwIcon
             aria-hidden="true"
@@ -72,7 +71,7 @@ export function RoomList() {
               네트워크 연결을 확인한 후 다시 시도해주세요.
             </p>
           </div>
-          <Button type="button" onClick={() => void roomsQuery.refetch()}>
+          <Button type="button" onClick={refetch}>
             다시 시도
           </Button>
         </div>
@@ -104,7 +103,7 @@ export function RoomList() {
             type="button"
             variant="outline"
             disabled={page === 1 || roomsQuery.isFetching}
-            onClick={() => setPage((currentPage) => currentPage - 1)}
+            onClick={goToPreviousPage}
           >
             이전
           </Button>
@@ -115,7 +114,7 @@ export function RoomList() {
             type="button"
             variant="outline"
             disabled={!roomsQuery.data.meta.hasNext || roomsQuery.isFetching}
-            onClick={() => setPage((currentPage) => currentPage + 1)}
+            onClick={goToNextPage}
           >
             다음
           </Button>

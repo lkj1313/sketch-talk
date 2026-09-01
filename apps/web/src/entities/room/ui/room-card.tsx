@@ -2,16 +2,11 @@ import type { RoomResponse } from '@sketch-talk/contracts'
 import { GlobeIcon, UsersIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { getRoomStatusLabel } from '../lib/room-status-label'
+
 type RoomCardProps = {
   room: RoomResponse
 }
-
-const ROOM_STATUS_LABEL = {
-  WAITING: '대기 중',
-  PLAYING: '게임 중',
-  FINISHED: '종료',
-  CLOSED: '닫힘',
-} as const
 
 export function RoomCard({ room }: RoomCardProps) {
   const isFull = room.playerCount >= room.maxPlayers
@@ -38,7 +33,7 @@ export function RoomCard({ room }: RoomCardProps) {
               : 'shrink-0 rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground'
           }
         >
-          {ROOM_STATUS_LABEL[room.status]}
+          {getRoomStatusLabel(room.status)}
         </span>
       </div>
 

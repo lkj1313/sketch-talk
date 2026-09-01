@@ -2,6 +2,8 @@ import type { ChatMessage } from '../model/chat-message.type'
 
 import { cn } from '@/shared/lib'
 
+import { formatChatTime } from '../lib/format-chat-time'
+
 export type ChatMessageItemProps = {
   message: ChatMessage
   isMine: boolean
@@ -43,17 +45,4 @@ export function ChatMessageItem({
       </div>
     </li>
   )
-}
-
-function formatChatTime(sentAt: string): string {
-  const date = new Date(sentAt)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
 }
