@@ -661,6 +661,7 @@ export class GamesService {
     endedAt: Date,
     participantOverride?: Array<{
       id: string;
+      userId?: string | null;
       nickname: string;
       score: number;
     }>,
@@ -687,6 +688,7 @@ export class GamesService {
           orderBy: [{ score: 'desc' }, { joinedAt: 'asc' }],
           select: {
             id: true,
+            userId: true,
             nickname: true,
             score: true,
           },
@@ -694,6 +696,17 @@ export class GamesService {
       const orderedScores = [...scores].sort(
         (first, second) => second.score - first.score,
       );
+
+      await transaction.gamePlayerResult.createMany({
+        data: orderedScores.map((score, index) => ({
+          gameSessionId: gameSession.id,
+          userId: score.userId ?? null,
+          participantIdSnapshot: score.id,
+          nicknameSnapshot: score.nickname,
+          score: score.score,
+          rank: index + 1,
+        })),
+      });
 
       return {
         type: 'FINISHED',
@@ -717,6 +730,7 @@ export class GamesService {
         orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
         select: {
           id: true,
+          userId: true,
           nickname: true,
           score: true,
         },

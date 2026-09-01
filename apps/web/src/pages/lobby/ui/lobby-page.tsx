@@ -1,12 +1,13 @@
-import { LogoutButton } from '@/features/auth-logout'
-import { CreateRoomDialog } from '@/features/room-create'
-import { Button } from '@/shared/ui'
-import { RoomList } from '@/widgets/room-list'
+import { LogoutButton } from "@/features/auth-logout";
+import { CreateRoomDialog } from "@/features/room-create";
+import { Button } from "@/shared/ui";
+import { RoomList } from "@/widgets/room-list";
+import { Link } from "react-router-dom";
 
-import { useLobbyPage } from '../model/use-lobby-page'
+import { useLobbyPage } from "../model/use-lobby-page";
 
 export function LobbyPage() {
-  const { goToLogin, isAuthenticated } = useLobbyPage()
+  const { goToLogin, isAuthenticated } = useLobbyPage();
 
   return (
     <main className="min-h-screen bg-muted/30">
@@ -21,13 +22,14 @@ export function LobbyPage() {
           <div className="flex items-center gap-2">
             <CreateRoomDialog />
             {isAuthenticated ? (
-              <LogoutButton />
+              <>
+                <Button variant="outline" render={<Link to="/me" />}>
+                  내 기록
+                </Button>
+                <LogoutButton />
+              </>
             ) : (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={goToLogin}
-              >
+              <Button type="button" variant="outline" onClick={goToLogin}>
                 로그인
               </Button>
             )}
@@ -39,5 +41,5 @@ export function LobbyPage() {
         </div>
       </div>
     </main>
-  )
+  );
 }

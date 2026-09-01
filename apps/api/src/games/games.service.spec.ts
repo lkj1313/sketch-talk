@@ -412,6 +412,7 @@ describe('GamesService.submitMessage', () => {
   const wordFindMany = jest.fn();
   const wordUpdate = jest.fn();
   const roomUpdate = jest.fn();
+  const gamePlayerResultCreateMany = jest.fn();
   const transaction = {
     roomParticipant: {
       findFirst: roomParticipantFindFirst,
@@ -433,6 +434,9 @@ describe('GamesService.submitMessage', () => {
     },
     room: {
       update: roomUpdate,
+    },
+    gamePlayerResult: {
+      createMany: gamePlayerResultCreateMany,
     },
   };
   const prisma = {
@@ -491,6 +495,7 @@ describe('GamesService.submitMessage', () => {
     gameSessionUpdate.mockResolvedValue({});
     wordUpdate.mockResolvedValue({});
     roomUpdate.mockResolvedValue({});
+    gamePlayerResultCreateMany.mockResolvedValue({ count: 2 });
   });
 
   it('일반 메시지는 점수 처리 없이 채팅 이벤트로 반환한다', async () => {
@@ -573,8 +578,13 @@ describe('GamesService.submitMessage', () => {
       currentRoundNumber: 1,
     });
     roomParticipantFindMany.mockResolvedValue([
-      { id: 'guesser-id', nickname: '정답자', score: 100 },
-      { id: 'drawer-id', nickname: '출제자', score: 50 },
+      {
+        id: 'guesser-id',
+        userId: 'user-id',
+        nickname: '정답자',
+        score: 100,
+      },
+      { id: 'drawer-id', userId: null, nickname: '출제자', score: 50 },
     ]);
 
     const result = await service.submitMessage(
@@ -590,6 +600,26 @@ describe('GamesService.submitMessage', () => {
     expect(roomUpdate).toHaveBeenCalledWith({
       where: { id: 'room-id' },
       data: { status: 'FINISHED', endedAt: expect.any(Date) },
+    });
+    expect(gamePlayerResultCreateMany).toHaveBeenCalledWith({
+      data: [
+        {
+          gameSessionId: 'game-session-id',
+          userId: 'user-id',
+          participantIdSnapshot: 'guesser-id',
+          nicknameSnapshot: '정답자',
+          score: 100,
+          rank: 1,
+        },
+        {
+          gameSessionId: 'game-session-id',
+          userId: null,
+          participantIdSnapshot: 'drawer-id',
+          nicknameSnapshot: '출제자',
+          score: 50,
+          rank: 2,
+        },
+      ],
     });
     expect(result).toEqual(
       expect.objectContaining({

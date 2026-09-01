@@ -32,6 +32,15 @@ test("회원가입 후 로그인하여 로비에 진입한다", async ({ page, c
     await expect(page.getByRole("heading", { name: "방 목록" })).toBeVisible();
     await expect(page.getByRole("button", { name: "로그아웃" })).toBeVisible();
 
+    await page.getByRole("link", { name: "내 기록" }).click();
+
+    await expect(page).toHaveURL(/\/me$/);
+    await expect(
+      page.getByRole("heading", { name: `${nickname}님` }),
+    ).toBeVisible();
+    await expect(page.getByText("아직 완료한 게임이 없습니다.")).toBeVisible();
+    await page.getByRole("link", { name: "로비로 돌아가기" }).click();
+
     await page.getByRole("button", { name: "로그아웃" }).click();
 
     await expect(page).toHaveURL(/\/login$/);

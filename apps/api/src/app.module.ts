@@ -6,6 +6,7 @@ import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import { AuthModule } from '@/auth/auth.module';
 import { GuestSessionModule } from '@/guest-session/guest-session.module';
+import { GameRecordsModule } from '@/game-records/game-records.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { RealtimeModule } from '@/realtime/realtime.module';
 import { RoomsModule } from '@/rooms/rooms.module';
@@ -21,6 +22,7 @@ import { WordsModule } from '@/words/words.module';
     PrismaModule,
     AuthModule,
     GuestSessionModule,
+    GameRecordsModule,
     RoomsModule,
     RealtimeModule,
     WordsModule,
