@@ -1,5 +1,5 @@
 import { MessageCircleIcon } from 'lucide-react'
-import { useEffect, useId, useRef } from 'react'
+import { useId } from 'react'
 
 import {
   ChatMessageItem,
@@ -7,6 +7,8 @@ import {
 } from '@/entities/chat-message'
 import { GameChatInput } from '@/features/game-chat-send'
 import { cn } from '@/shared/lib/cn'
+
+import { useMessageListAutoScroll } from '../model/use-message-list-auto-scroll'
 
 export type GameChatProps = {
   messages: ChatMessage[]
@@ -24,17 +26,7 @@ export function GameChat({
   className,
 }: GameChatProps) {
   const titleId = useId()
-  const messageListRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const messageList = messageListRef.current
-
-    if (!messageList) {
-      return
-    }
-
-    messageList.scrollTop = messageList.scrollHeight
-  }, [messages.length])
+  const messageListRef = useMessageListAutoScroll(messages.length)
 
   return (
     <section

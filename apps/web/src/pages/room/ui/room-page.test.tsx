@@ -16,10 +16,15 @@ const mocks = vi.hoisted(() => ({
   useRoomRealtime: vi.fn(),
 }))
 
-vi.mock('@/entities/room', () => ({
-  useRoom: mocks.useRoom,
-  useCurrentRoomParticipant: mocks.useCurrentRoomParticipant,
-}))
+vi.mock('@/entities/room', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/entities/room')>()
+
+  return {
+    ...actual,
+    useRoom: mocks.useRoom,
+    useCurrentRoomParticipant: mocks.useCurrentRoomParticipant,
+  }
+})
 
 vi.mock('@/features/room-join', () => ({
   JoinRoomForm: ({ code }: { code: string }) => (

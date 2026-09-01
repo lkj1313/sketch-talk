@@ -1,7 +1,8 @@
 import { SendIcon } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
 
 import { Button, Input } from '@/shared/ui'
+
+import { useGameChatInput } from '../model/use-game-chat-input'
 
 const GAME_CHAT_MESSAGE_MAX_LENGTH = 100
 
@@ -14,19 +15,8 @@ export function GameChatInput({
   onSendMessage,
   disabled = false,
 }: GameChatInputProps) {
-  const [message, setMessage] = useState('')
-  const trimmedMessage = message.trim()
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault()
-
-    if (!trimmedMessage || disabled) {
-      return
-    }
-
-    onSendMessage(trimmedMessage)
-    setMessage('')
-  }
+  const { handleSubmit, isSubmitDisabled, message, setMessage } =
+    useGameChatInput({ onSendMessage, disabled })
 
   return (
     <form
@@ -45,7 +35,7 @@ export function GameChatInput({
       />
       <Button
         aria-label="메시지 전송"
-        disabled={disabled || !trimmedMessage}
+        disabled={isSubmitDisabled}
         size="icon-lg"
         type="submit"
       >

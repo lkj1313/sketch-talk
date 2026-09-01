@@ -1,14 +1,12 @@
-import { useNavigate } from 'react-router-dom'
-
-import { useSessionStore } from '@/entities/session'
 import { LogoutButton } from '@/features/auth-logout'
 import { CreateRoomDialog } from '@/features/room-create'
 import { Button } from '@/shared/ui'
 import { RoomList } from '@/widgets/room-list'
 
+import { useLobbyPage } from '../model/use-lobby-page'
+
 export function LobbyPage() {
-  const navigate = useNavigate()
-  const accessToken = useSessionStore((state) => state.accessToken)
+  const { goToLogin, isAuthenticated } = useLobbyPage()
 
   return (
     <main className="min-h-screen bg-muted/30">
@@ -22,13 +20,13 @@ export function LobbyPage() {
           </div>
           <div className="flex items-center gap-2">
             <CreateRoomDialog />
-            {accessToken ? (
+            {isAuthenticated ? (
               <LogoutButton />
             ) : (
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => void navigate('/login')}
+                onClick={goToLogin}
               >
                 로그인
               </Button>

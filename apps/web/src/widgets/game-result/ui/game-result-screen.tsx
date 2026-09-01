@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 
 import { Button } from '@/shared/ui'
 
+import { getGameRankings } from '../lib/get-game-rankings'
+
 export type GameResultScreenProps = {
   result: GameFinishedEvent
   currentParticipantId?: string
@@ -13,7 +15,7 @@ export function GameResultScreen({
   result,
   currentParticipantId,
 }: GameResultScreenProps) {
-  const rankings = [...result.scores].sort((a, b) => b.score - a.score)
+  const rankings = getGameRankings(result.scores)
 
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-8">
@@ -30,8 +32,7 @@ export function GameResultScreen({
         </p>
 
         <ol aria-label="최종 순위" className="mt-8 space-y-3 text-left">
-          {rankings.map((score, index) => {
-            const rank = getRank(rankings, index)
+          {rankings.map((score) => {
             const isCurrentParticipant =
               score.participantId === currentParticipantId
 
@@ -42,13 +43,13 @@ export function GameResultScreen({
                 className="flex items-center gap-3 rounded-xl border bg-background px-4 py-3"
               >
                 <span className="flex w-10 shrink-0 items-center justify-center font-bold">
-                  {rank === 1 ? (
+                  {score.rank === 1 ? (
                     <CrownIcon
                       aria-label="1위"
                       className="size-6 text-amber-500"
                     />
                   ) : (
-                    `${rank}위`
+                    `${score.rank}위`
                   )}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-medium">
@@ -75,14 +76,4 @@ export function GameResultScreen({
       </section>
     </main>
   )
-}
-
-function getRank(
-  rankings: GameFinishedEvent['scores'],
-  index: number,
-): number {
-  const score = rankings[index]?.score
-  const firstIndex = rankings.findIndex((ranking) => ranking.score === score)
-
-  return firstIndex + 1
 }

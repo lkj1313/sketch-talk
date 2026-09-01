@@ -4,16 +4,10 @@ import type {
 } from '@sketch-talk/contracts'
 import { ArrowLeftIcon, LockIcon, UsersIcon } from 'lucide-react'
 
+import { getRoomStatusLabel } from '@/entities/room'
 import { JoinRoomForm } from '@/features/room-join'
 import { RoomActions } from '@/features/room-manage'
 import { Button } from '@/shared/ui'
-
-const ROOM_STATUS_LABEL = {
-  WAITING: '대기 중',
-  PLAYING: '게임 중',
-  FINISHED: '종료',
-  CLOSED: '닫힘',
-} as const
 
 export type RoomDetailsProps = {
   room: RoomDetailResponse
@@ -41,7 +35,7 @@ export function RoomDetails({
                 {room.title}
               </h1>
               <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
-                {ROOM_STATUS_LABEL[room.status]}
+                {getRoomStatusLabel(room.status)}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">

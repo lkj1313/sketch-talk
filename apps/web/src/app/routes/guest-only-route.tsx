@@ -1,11 +1,11 @@
 import { Navigate, Outlet } from 'react-router-dom'
 
-import { useSessionStore } from '@/entities/session'
+import { useGuestOnlyRoute } from './model/use-guest-only-route'
 
 export function GuestOnlyRoute() {
-  const user = useSessionStore((state) => state.user)
+  const { isAuthenticated } = useGuestOnlyRoute()
 
-  if (user) {
+  if (isAuthenticated) {
     return <Navigate to="/lobby" replace />
   }
 
