@@ -7,6 +7,7 @@ import {
 } from 'react'
 
 import {
+  clearCanvas,
   drawStroke,
   getNormalizedPoint,
   resizeCanvas,
@@ -21,9 +22,10 @@ import {
 
 type UseDrawingBoardOptions = {
   roundId: string
+  onClear?: () => void
 }
 
-export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
+export function useDrawingBoard({ roundId, onClear }: UseDrawingBoardOptions) {
   const [color, setColor] = useState<DrawingColor>(DEFAULT_DRAWING_COLOR)
   const [tool, setTool] = useState<DrawingTool>('PEN')
   const [width, setWidth] = useState<DrawingWidth>(DEFAULT_DRAWING_WIDTH)
@@ -151,8 +153,32 @@ export function useDrawingBoard({ roundId }: UseDrawingBoardOptions) {
     }
   }
 
+  function clearDrawing(): void {
+    const canvas = canvasRef.current
+    const activePointerId = activePointerIdRef.current
+
+    if (
+      canvas &&
+      activePointerId !== null &&
+      canvas.hasPointerCapture(activePointerId)
+    ) {
+      canvas.releasePointerCapture(activePointerId)
+    }
+
+    activePointerIdRef.current = null
+    currentStrokeRef.current = null
+    completedStrokesRef.current = []
+
+    if (canvas) {
+      clearCanvas(canvas)
+    }
+
+    onClear?.()
+  }
+
   return {
     canvasRef,
+    clearDrawing,
     color,
     finishStroke,
     handlePointerDown,

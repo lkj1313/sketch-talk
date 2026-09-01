@@ -1,5 +1,5 @@
 import type { DrawingTool } from '@sketch-talk/contracts'
-import { EraserIcon, PencilIcon } from 'lucide-react'
+import { EraserIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 
 import { Button } from '@/shared/ui'
 
@@ -14,6 +14,7 @@ type DrawingToolbarProps = {
   color: DrawingColor
   tool: DrawingTool
   width: DrawingWidth
+  onClear: () => void
   onColorChange: (color: DrawingColor) => void
   onToolChange: (tool: DrawingTool) => void
   onWidthChange: (width: DrawingWidth) => void
@@ -23,6 +24,7 @@ export function DrawingToolbar({
   color,
   tool,
   width,
+  onClear,
   onColorChange,
   onToolChange,
   onWidthChange,
@@ -99,6 +101,16 @@ export function DrawingToolbar({
           )
         })}
       </div>
+
+      <Button
+        className="ml-auto"
+        onClick={onClear}
+        type="button"
+        variant="destructive"
+      >
+        <Trash2Icon aria-hidden="true" />
+        전체 지우기
+      </Button>
     </div>
   )
 }

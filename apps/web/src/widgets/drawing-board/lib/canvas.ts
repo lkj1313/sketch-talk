@@ -1,5 +1,18 @@
 import type { DrawingPoint, DrawingStroke } from '@sketch-talk/contracts'
 
+export function clearCanvas(canvas: HTMLCanvasElement): void {
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return
+  }
+
+  context.save()
+  context.setTransform(1, 0, 0, 1, 0, 0)
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  context.restore()
+}
+
 export function getNormalizedPoint(
   canvas: HTMLCanvasElement,
   clientX: number,

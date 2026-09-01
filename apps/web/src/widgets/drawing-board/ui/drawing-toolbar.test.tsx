@@ -10,6 +10,7 @@ describe('DrawingToolbar', () => {
         color="#111827"
         tool="PEN"
         width={4}
+        onClear={vi.fn()}
         onColorChange={vi.fn()}
         onToolChange={vi.fn()}
         onWidthChange={vi.fn()}
@@ -35,6 +36,7 @@ describe('DrawingToolbar', () => {
         color="#111827"
         tool="PEN"
         width={4}
+        onClear={vi.fn()}
         onColorChange={onColorChange}
         onToolChange={vi.fn()}
         onWidthChange={onWidthChange}
@@ -56,6 +58,7 @@ describe('DrawingToolbar', () => {
         color="#111827"
         tool="PEN"
         width={4}
+        onClear={vi.fn()}
         onColorChange={vi.fn()}
         onToolChange={onToolChange}
         onWidthChange={vi.fn()}
@@ -70,6 +73,7 @@ describe('DrawingToolbar', () => {
         color="#111827"
         tool="ERASER"
         width={4}
+        onClear={vi.fn()}
         onColorChange={vi.fn()}
         onToolChange={onToolChange}
         onWidthChange={vi.fn()}
@@ -82,5 +86,25 @@ describe('DrawingToolbar', () => {
     )
     expect(screen.getByRole('button', { name: '검정 색상' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '보통' })).toBeDisabled()
+  })
+
+  it('전체 지우기를 전달한다', () => {
+    const onClear = vi.fn()
+
+    render(
+      <DrawingToolbar
+        color="#111827"
+        tool="PEN"
+        width={4}
+        onClear={onClear}
+        onColorChange={vi.fn()}
+        onToolChange={vi.fn()}
+        onWidthChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '전체 지우기' }))
+
+    expect(onClear).toHaveBeenCalledOnce()
   })
 })

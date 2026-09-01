@@ -9,13 +9,19 @@ import { DrawingToolbar } from './drawing-toolbar'
 export type DrawingBoardProps = {
   roundId: string
   className?: string
+  onClear?: () => void
 }
 
-export function DrawingBoard({ roundId, className }: DrawingBoardProps) {
+export function DrawingBoard({
+  roundId,
+  className,
+  onClear,
+}: DrawingBoardProps) {
   const titleId = useId()
   const instructionId = useId()
   const {
     canvasRef,
+    clearDrawing,
     color,
     finishStroke,
     handlePointerDown,
@@ -25,7 +31,7 @@ export function DrawingBoard({ roundId, className }: DrawingBoardProps) {
     setWidth,
     tool,
     width,
-  } = useDrawingBoard({ roundId })
+  } = useDrawingBoard({ roundId, onClear })
 
   return (
     <section
@@ -46,6 +52,7 @@ export function DrawingBoard({ roundId, className }: DrawingBoardProps) {
         color={color}
         tool={tool}
         width={width}
+        onClear={clearDrawing}
         onColorChange={setColor}
         onToolChange={setTool}
         onWidthChange={setWidth}
